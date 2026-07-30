@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "real-time-system-monitoring"
-version = "0.1.0"
-description = "CPU-only Linux telemetry collector for a predictive observability platform"
+version = "0.4.0"
+description = "CPU-first predictive observability platform with durable telemetry processing"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
@@ -30,6 +30,7 @@ dev = [
 [project.scripts]
 rtmonitor = "rtmonitor.cli:main"
 rtmonitor-api = "rtmonitor.api.main:run"
+rtmonitor-worker = "rtmonitor.pipeline.main:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
