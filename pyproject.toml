@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "CPU-only Linux telemetry collector for a predictive observability platform"
 readme = "README.md"
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = { text = "Proprietary" }
 authors = [{ name = "Nehemiah Boyce" }]
 dependencies = []
 
@@ -35,4 +35,3 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 python_version = "3.12"
 strict = true
 files = ["src"]
-
