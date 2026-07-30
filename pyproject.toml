@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "real-time-system-monitoring"
-version = "0.5.0"
-description = "CPU-first predictive observability platform with durable time-series processing"
+version = "0.6.0"
+description = "CPU-first predictive observability platform with an incident dashboard"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }
