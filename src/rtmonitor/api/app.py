@@ -16,7 +16,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from rtmonitor.api.config import ApiSettings
-from rtmonitor.api.contracts import AcceptedResponse, HealthResponse, TelemetryEventRequest
+from rtmonitor.api.contracts import (
+    AcceptedResponse,
+    HealthResponse,
+    PipelineStatusResponse,
+    TelemetryEventRequest,
+)
 from rtmonitor.api.logging import configure_logging, log_event
 from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
 from rtmonitor.storage.sqlalchemy import StorageUnavailableError
@@ -48,8 +53,8 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.3.0",
-        description="Validates and durably stores versioned telemetry events.",
+        version="0.4.0",
+        description="Validates, stores, and queues versioned telemetry events.",
         lifespan=lifespan,
     )
 
@@ -140,6 +145,18 @@ def create_app(
             return HealthResponse(status="not_ready", storage="unavailable")
         return HealthResponse(status="ready", storage="available")
 
+    @app.get("/v1/pipeline/status", response_model=PipelineStatusResponse)
+    async def pipeline_status() -> PipelineStatusResponse:
+        stats = await resolved_store.queue_stats()
+        return PipelineStatusResponse(
+            pending=stats.pending,
+            processing=stats.processing,
+            retry=stats.retry,
+            processed=stats.processed,
+            dead_letter=stats.dead_letter,
+            active_depth=stats.pending + stats.processing + stats.retry,
+        )
+
     @app.post(
         "/v1/telemetry",
         status_code=status.HTTP_202_ACCEPTED,
@@ -154,6 +171,7 @@ def create_app(
         try:
             result = await resolved_store.store(event)
             stored_events = await resolved_store.count()
+            queue_depth = await resolved_store.queue_depth()
         except StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -173,6 +191,7 @@ def create_app(
                 "schema_version": event.schema_version,
                 "result": result,
                 "stored_events": stored_events,
+                "queue_depth": queue_depth,
             },
         )
         return AcceptedResponse(
@@ -180,6 +199,7 @@ def create_app(
             event_id=event.event_id,
             request_id=request.state.request_id,
             stored_events=stored_events,
+            queue_depth=queue_depth,
         )
 
     return app
