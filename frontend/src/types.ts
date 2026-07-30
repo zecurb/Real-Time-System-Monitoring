@@ -79,3 +79,22 @@ export interface Runtime {
   accelerator: string | null;
   fallback_reason: string | null;
 }
+
+export interface Incident {
+  incident_id: string;
+  node_id: string;
+  metric_name: string;
+  status: "open" | "acknowledged" | "resolved";
+  severity: "warning" | "critical";
+  title: string;
+  summary: string;
+  occurrence_count: number;
+  first_seen: string;
+  last_seen: string;
+  owner: string | null;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
+  revision: number;
+  updated_at: string;
+}

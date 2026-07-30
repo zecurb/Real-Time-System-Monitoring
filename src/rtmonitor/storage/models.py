@@ -6,6 +6,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -158,4 +159,112 @@ class ForecastRecord(Base):
     __table_args__ = (
         Index("ix_forecasts_node_predicted", "node_id", "predicted_at"),
         Index("ix_forecasts_risk_predicted", "risk", "predicted_at"),
+    )
+
+
+class IncidentRecord(Base):
+    __tablename__ = "incidents"
+
+    incident_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    dedup_key: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    metric_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    owner: Mapped[str | None] = mapped_column(String(128))
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('open', 'acknowledged', 'resolved')",
+            name="ck_incidents_status",
+        ),
+        CheckConstraint(
+            "severity IN ('warning', 'critical')",
+            name="ck_incidents_severity",
+        ),
+        CheckConstraint("occurrence_count >= 0", name="ck_incidents_occurrence_count"),
+        CheckConstraint("revision >= 0", name="ck_incidents_revision"),
+        Index("ix_incidents_status_severity_updated", "status", "severity", "updated_at"),
+        Index("ix_incidents_node_updated", "node_id", "updated_at"),
+    )
+
+
+class IncidentSignalRecord(Base):
+    __tablename__ = "incident_signals"
+
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("telemetry_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source: Mapped[str] = mapped_column(String(16), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("incidents.incident_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    details: Mapped[dict[str, object]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "source IN ('anomaly', 'forecast')",
+            name="ck_incident_signals_source",
+        ),
+        CheckConstraint(
+            "severity IN ('warning', 'critical')",
+            name="ck_incident_signals_severity",
+        ),
+        Index("ix_incident_signals_incident_observed", "incident_id", "observed_at"),
+    )
+
+
+class IncidentTimelineRecord(Base):
+    __tablename__ = "incident_timeline"
+
+    timeline_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    incident_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("incidents.incident_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+    from_status: Mapped[str | None] = mapped_column(String(16))
+    to_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('opened', 'escalated', 'acknowledged', 'resolved', 'reopened')",
+            name="ck_incident_timeline_action",
+        ),
+        CheckConstraint(
+            "from_status IS NULL OR "
+            "from_status IN ('open', 'acknowledged', 'resolved')",
+            name="ck_incident_timeline_from_status",
+        ),
+        CheckConstraint(
+            "to_status IN ('open', 'acknowledged', 'resolved')",
+            name="ck_incident_timeline_to_status",
+        ),
+        Index("ix_incident_timeline_incident_occurred", "incident_id", "occurred_at"),
     )

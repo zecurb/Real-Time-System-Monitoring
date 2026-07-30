@@ -2,6 +2,12 @@
 
 from rtmonitor.storage.base import (
     EventStore,
+    Incident,
+    IncidentConflictError,
+    IncidentNotFoundError,
+    IncidentSignal,
+    IncidentTimelineEvent,
+    InvalidIncidentTransitionError,
     MetricSample,
     NodeSummary,
     QueueLease,
@@ -15,6 +21,12 @@ from rtmonitor.storage.sqlalchemy import SqlAlchemyEventStore
 __all__ = [
     "EventStore",
     "InMemoryEventStore",
+    "Incident",
+    "IncidentConflictError",
+    "IncidentNotFoundError",
+    "IncidentSignal",
+    "IncidentTimelineEvent",
+    "InvalidIncidentTransitionError",
     "MetricSample",
     "NodeSummary",
     "QueueLease",

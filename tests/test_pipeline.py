@@ -110,6 +110,18 @@ class PipelineWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(memory_findings[0].baseline, 22.0)
             self.assertEqual(memory_findings[0].severity, "critical")
             self.assertEqual(memory_findings[0].sample_count, 5)
+            incidents = await store.list_incidents(
+                status="open",
+                node_id="test-node-001",
+                limit=10,
+            )
+            memory_incidents = [
+                incident
+                for incident in incidents
+                if incident.metric_name == "memory.used.percent"
+            ]
+            self.assertEqual(len(memory_incidents), 1)
+            self.assertEqual(memory_incidents[0].severity, "critical")
             await store.close()
 
     async def test_default_processor_ignores_normal_low_variance_noise(self) -> None:
@@ -176,6 +188,14 @@ class PipelineWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(forecasts[0].provider, "cpu")
             self.assertIsNotNone(forecasts[0].fallback_reason)
             self.assertAlmostEqual(forecasts[0].backtest_error or 0.0, 0.0)
+            incidents = await store.list_incidents(
+                status="open",
+                node_id="test-node-001",
+                limit=10,
+            )
+            self.assertEqual(len(incidents), 1)
+            self.assertEqual(incidents[0].metric_name, "memory.used.percent")
+            self.assertEqual(incidents[0].occurrence_count, 2)
             await store.close()
 
     async def test_recent_metric_window_returns_newest_points_chronologically(

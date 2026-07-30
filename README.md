@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 8 — hardware-aware resource forecasting.
+> Status: Phase 9 — durable alert and incident workflows.
 
 ## Current capabilities
 
@@ -39,6 +39,10 @@ actionable evidence to engineers during incidents.
   per-node median/MAD baselines and durable, explainable severity findings.
 - Forecasts reliable memory and disk threshold crossings with confidence,
   risk, backtesting, and observable CPU/GPU provider selection.
+- Correlates anomaly and forecast evidence into durable incidents by node and
+  metric, with retry-safe occurrence counting and severity escalation.
+- Supports acknowledgement, resolution, reopening, optimistic revision
+  checks, ownership, and an immutable operator timeline.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -115,6 +119,23 @@ Inspect the active prediction provider and current resource forecasts:
 curl http://127.0.0.1:8000/v1/runtime | jq .
 curl http://127.0.0.1:8000/v1/forecasts | jq .
 ```
+
+Inspect and operate the incident queue:
+
+```bash
+curl http://127.0.0.1:8000/v1/incidents | jq .
+
+curl -X POST http://127.0.0.1:8000/v1/incidents/INCIDENT_ID/acknowledge \
+  -H "Content-Type: application/json" \
+  --data '{"actor":"on-call","note":"Investigating","expected_revision":1}'
+
+curl -X POST http://127.0.0.1:8000/v1/incidents/INCIDENT_ID/resolve \
+  -H "Content-Type: application/json" \
+  --data '{"actor":"on-call","note":"Capacity restored","expected_revision":2}'
+```
+
+See the [incident-response runbook](docs/runbooks/incident-response.md) before
+operating a production deployment.
 
 CPU execution is the reliable default on every host. Set
 `RTMONITOR_EXECUTION_PROVIDER=auto|cpu|gpu` before starting the API and worker.

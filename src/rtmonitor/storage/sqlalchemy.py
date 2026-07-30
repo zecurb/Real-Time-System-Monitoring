@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal, cast
 
-from sqlalchemy import and_, delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, case, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -20,6 +21,12 @@ from rtmonitor.metrics import metric_values
 from rtmonitor.storage.base import (
     Anomaly,
     Forecast,
+    Incident,
+    IncidentConflictError,
+    IncidentNotFoundError,
+    IncidentSignal,
+    IncidentTimelineEvent,
+    InvalidIncidentTransitionError,
     MetricSample,
     NodeSummary,
     QueueLease,
@@ -31,6 +38,9 @@ from rtmonitor.storage.models import (
     AnomalyRecord,
     Base,
     ForecastRecord,
+    IncidentRecord,
+    IncidentSignalRecord,
+    IncidentTimelineRecord,
     MetricSampleRecord,
     PipelineQueueRecord,
     TelemetryRecord,
@@ -47,6 +57,29 @@ def _utc(value: datetime) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _incident(record: IncidentRecord) -> Incident:
+    return Incident(
+        incident_id=record.incident_id,
+        node_id=record.node_id,
+        metric_name=record.metric_name,
+        status=cast(Literal["open", "acknowledged", "resolved"], record.status),
+        severity=cast(Literal["warning", "critical"], record.severity),
+        title=record.title,
+        summary=record.summary,
+        occurrence_count=record.occurrence_count,
+        first_seen=_utc(record.first_seen),
+        last_seen=_utc(record.last_seen),
+        owner=record.owner,
+        acknowledged_at=(
+            _utc(record.acknowledged_at) if record.acknowledged_at is not None else None
+        ),
+        resolved_at=_utc(record.resolved_at) if record.resolved_at is not None else None,
+        resolution_note=record.resolution_note,
+        revision=record.revision,
+        updated_at=_utc(record.updated_at),
+    )
 
 
 class SqlAlchemyEventStore:
@@ -284,12 +317,13 @@ class SqlAlchemyEventStore:
         return len(rows)
 
     async def process_telemetry(self, payload: dict[str, object]) -> None:
-        """Normalize telemetry and persist explainable anomaly findings idempotently."""
+        """Normalize telemetry and persist derived risk signals idempotently."""
         event = TelemetryEventRequest.model_validate(payload)
         await self.write_metric_samples(payload)
         values = metric_values(event)
         provider = resolve_execution_provider()
         forecasts: list[dict[str, object]] = []
+        incident_signals: list[IncidentSignal] = []
         for metric_name, threshold in FORECAST_THRESHOLDS.items():
             history = await self.query_recent_metric_samples(
                 node_id=event.node_id,
@@ -328,6 +362,32 @@ class SqlAlchemyEventStore:
                         "created_at": datetime.now(UTC),
                     }
                 )
+                if forecast_result.risk in {"warning", "critical"}:
+                    incident_signals.append(
+                        IncidentSignal(
+                            event_id=str(event.event_id),
+                            node_id=event.node_id,
+                            metric_name=metric_name,
+                            observed_at=event.observed_at,
+                            source="forecast",
+                            severity=cast(
+                                Literal["warning", "critical"],
+                                forecast_result.risk,
+                            ),
+                            title=f"{metric_name} exhaustion risk on {event.node_id}",
+                            summary=(
+                                f"Expected to cross {forecast_result.threshold:.1f} "
+                                f"in {forecast_result.hours_to_threshold:.1f} hours"
+                            ),
+                            details={
+                                "current_value": forecast_result.current_value,
+                                "threshold": forecast_result.threshold,
+                                "hours_to_threshold": forecast_result.hours_to_threshold,
+                                "r_squared": forecast_result.r_squared,
+                                "provider": forecast_result.provider,
+                            },
+                        )
+                    )
         if forecasts:
             forecast_insert: Executable
             if self._engine.dialect.name == "postgresql":
@@ -382,30 +442,199 @@ class SqlAlchemyEventStore:
                     "created_at": datetime.now(UTC),
                 }
             )
-        if not findings:
-            return
-        statement: Executable
-        if self._engine.dialect.name == "postgresql":
-            statement = (
-                postgresql_insert(AnomalyRecord)
-                .values(findings)
-                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+            incident_signals.append(
+                IncidentSignal(
+                    event_id=str(event.event_id),
+                    node_id=event.node_id,
+                    metric_name=metric_name,
+                    observed_at=event.observed_at,
+                    source="anomaly",
+                    severity=cast(
+                        Literal["warning", "critical"],
+                        anomaly_result.severity,
+                    ),
+                    title=f"{metric_name} anomaly on {event.node_id}",
+                    summary=(
+                        f"Observed {values[metric_name]:.2f} against "
+                        f"{anomaly_result.baseline:.2f} baseline"
+                    ),
+                    details={
+                        "value": values[metric_name],
+                        "baseline": anomaly_result.baseline,
+                        "dispersion": anomaly_result.dispersion,
+                        "score": anomaly_result.score,
+                    },
+                )
             )
-        elif self._engine.dialect.name == "sqlite":
-            statement = (
-                sqlite_insert(AnomalyRecord)
-                .values(findings)
-                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
-            )
-        else:
-            raise StorageUnavailableError("unsupported anomaly storage dialect")
+        if findings:
+            statement: Executable
+            if self._engine.dialect.name == "postgresql":
+                statement = (
+                    postgresql_insert(AnomalyRecord)
+                    .values(findings)
+                    .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+                )
+            elif self._engine.dialect.name == "sqlite":
+                statement = (
+                    sqlite_insert(AnomalyRecord)
+                    .values(findings)
+                    .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+                )
+            else:
+                raise StorageUnavailableError("unsupported anomaly storage dialect")
+            async with self._sessions() as session:
+                try:
+                    await session.execute(statement)
+                    await session.commit()
+                except SQLAlchemyError as exc:
+                    await session.rollback()
+                    raise StorageUnavailableError("anomaly write failed") from exc
+        if incident_signals:
+            await self.record_incident_signals(incident_signals)
+
+    async def record_incident_signals(self, signals: list[IncidentSignal]) -> int:
+        """Group risk evidence into durable, deduplicated incidents."""
+        inserted_signals = 0
         async with self._sessions() as session:
             try:
-                await session.execute(statement)
+                for signal in signals:
+                    now = datetime.now(UTC)
+                    dedup_key = f"{signal.node_id}|{signal.metric_name}"
+                    incident_id = str(
+                        uuid.uuid5(
+                            uuid.NAMESPACE_URL,
+                            f"rtmonitor://incident/{dedup_key}",
+                        )
+                    )
+                    incident_values = {
+                        "incident_id": incident_id,
+                        "dedup_key": dedup_key,
+                        "node_id": signal.node_id,
+                        "metric_name": signal.metric_name,
+                        "status": "open",
+                        "severity": signal.severity,
+                        "title": signal.title,
+                        "summary": signal.summary,
+                        "occurrence_count": 0,
+                        "first_seen": signal.observed_at,
+                        "last_seen": signal.observed_at,
+                        "revision": 0,
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                    if self._engine.dialect.name == "postgresql":
+                        incident_insert: Executable = (
+                            postgresql_insert(IncidentRecord)
+                            .values(incident_values)
+                            .on_conflict_do_nothing(index_elements=["dedup_key"])
+                        )
+                        signal_insert: Executable = (
+                            postgresql_insert(IncidentSignalRecord)
+                            .values(
+                                event_id=signal.event_id,
+                                metric_name=signal.metric_name,
+                                source=signal.source,
+                                incident_id=incident_id,
+                                observed_at=signal.observed_at,
+                                severity=signal.severity,
+                                details=signal.details,
+                                created_at=now,
+                            )
+                            .on_conflict_do_nothing(
+                                index_elements=["event_id", "metric_name", "source"]
+                            )
+                            .returning(IncidentSignalRecord.event_id)
+                        )
+                    elif self._engine.dialect.name == "sqlite":
+                        incident_insert = (
+                            sqlite_insert(IncidentRecord)
+                            .values(incident_values)
+                            .on_conflict_do_nothing(index_elements=["dedup_key"])
+                        )
+                        signal_insert = (
+                            sqlite_insert(IncidentSignalRecord)
+                            .values(
+                                event_id=signal.event_id,
+                                metric_name=signal.metric_name,
+                                source=signal.source,
+                                incident_id=incident_id,
+                                observed_at=signal.observed_at,
+                                severity=signal.severity,
+                                details=signal.details,
+                                created_at=now,
+                            )
+                            .on_conflict_do_nothing(
+                                index_elements=["event_id", "metric_name", "source"]
+                            )
+                            .returning(IncidentSignalRecord.event_id)
+                        )
+                    else:
+                        raise StorageUnavailableError(
+                            "unsupported incident storage dialect"
+                        )
+                    await session.execute(incident_insert)
+                    inserted = await session.scalar(signal_insert)
+                    if inserted is None:
+                        continue
+
+                    incident_statement = select(IncidentRecord).where(
+                        IncidentRecord.incident_id == incident_id
+                    )
+                    if self._engine.dialect.name == "postgresql":
+                        incident_statement = incident_statement.with_for_update()
+                    incident = await session.scalar(incident_statement)
+                    if incident is None:
+                        raise StorageUnavailableError(
+                            "incident disappeared while recording signal"
+                        )
+
+                    previous_status = incident.status
+                    timeline_action: str | None = None
+                    timeline_from: str | None = previous_status
+                    if incident.occurrence_count == 0:
+                        timeline_action = "opened"
+                        timeline_from = None
+                    elif incident.status == "resolved":
+                        incident.status = "open"
+                        incident.owner = None
+                        incident.acknowledged_at = None
+                        incident.resolved_at = None
+                        incident.resolution_note = None
+                        timeline_action = "reopened"
+                    elif incident.severity == "warning" and signal.severity == "critical":
+                        timeline_action = "escalated"
+
+                    if signal.severity == "critical":
+                        incident.severity = "critical"
+                    incident.title = signal.title
+                    incident.summary = signal.summary
+                    incident.occurrence_count += 1
+                    incident.last_seen = max(
+                        _utc(incident.last_seen),
+                        _utc(signal.observed_at),
+                    )
+                    incident.revision += 1
+                    incident.updated_at = now
+                    inserted_signals += 1
+
+                    if timeline_action is not None:
+                        session.add(
+                            IncidentTimelineRecord(
+                                timeline_id=str(uuid.uuid4()),
+                                incident_id=incident.incident_id,
+                                action=timeline_action,
+                                actor="rtmonitor-worker",
+                                note=signal.summary,
+                                from_status=timeline_from,
+                                to_status=incident.status,
+                                occurred_at=now,
+                            )
+                        )
                 await session.commit()
             except SQLAlchemyError as exc:
                 await session.rollback()
-                raise StorageUnavailableError("anomaly write failed") from exc
+                raise StorageUnavailableError("incident signal write failed") from exc
+        return inserted_signals
 
     async def query_metric_samples(
         self,
@@ -594,6 +823,167 @@ class SqlAlchemyEventStore:
             )
             for record in records
         ]
+
+    async def list_incidents(
+        self,
+        *,
+        status: Literal["open", "acknowledged", "resolved"] | None,
+        node_id: str | None,
+        limit: int,
+    ) -> list[Incident]:
+        status_order = case(
+            (IncidentRecord.status == "open", 0),
+            (IncidentRecord.status == "acknowledged", 1),
+            else_=2,
+        )
+        severity_order = case((IncidentRecord.severity == "critical", 0), else_=1)
+        statement = select(IncidentRecord)
+        if status is not None:
+            statement = statement.where(IncidentRecord.status == status)
+        if node_id is not None:
+            statement = statement.where(IncidentRecord.node_id == node_id)
+        statement = statement.order_by(
+            status_order,
+            severity_order,
+            IncidentRecord.updated_at.desc(),
+        ).limit(limit)
+        async with self._sessions() as session:
+            records = (await session.scalars(statement)).all()
+        return [_incident(record) for record in records]
+
+    async def incident_timeline(
+        self,
+        *,
+        incident_id: str,
+        limit: int,
+    ) -> list[IncidentTimelineEvent]:
+        statement = (
+            select(IncidentTimelineRecord)
+            .where(IncidentTimelineRecord.incident_id == incident_id)
+            .order_by(
+                IncidentTimelineRecord.occurred_at,
+                IncidentTimelineRecord.timeline_id,
+            )
+            .limit(limit)
+        )
+        async with self._sessions() as session:
+            records = (await session.scalars(statement)).all()
+            if not records:
+                exists = await session.scalar(
+                    select(IncidentRecord.incident_id).where(
+                        IncidentRecord.incident_id == incident_id
+                    )
+                )
+                if exists is None:
+                    raise IncidentNotFoundError(incident_id)
+        return [
+            IncidentTimelineEvent(
+                timeline_id=record.timeline_id,
+                incident_id=record.incident_id,
+                action=cast(
+                    Literal[
+                        "opened",
+                        "escalated",
+                        "acknowledged",
+                        "resolved",
+                        "reopened",
+                    ],
+                    record.action,
+                ),
+                actor=record.actor,
+                note=record.note,
+                from_status=cast(
+                    Literal["open", "acknowledged", "resolved"] | None,
+                    record.from_status,
+                ),
+                to_status=cast(
+                    Literal["open", "acknowledged", "resolved"],
+                    record.to_status,
+                ),
+                occurred_at=_utc(record.occurred_at),
+            )
+            for record in records
+        ]
+
+    async def transition_incident(
+        self,
+        *,
+        incident_id: str,
+        action: Literal["acknowledge", "resolve"],
+        actor: str,
+        note: str | None,
+        expected_revision: int,
+    ) -> Incident:
+        now = datetime.now(UTC)
+        async with self._sessions() as session:
+            try:
+                statement = select(IncidentRecord).where(
+                    IncidentRecord.incident_id == incident_id
+                )
+                if self._engine.dialect.name == "postgresql":
+                    statement = statement.with_for_update()
+                record = await session.scalar(statement)
+                if record is None:
+                    raise IncidentNotFoundError(incident_id)
+                if record.revision != expected_revision:
+                    raise IncidentConflictError(
+                        f"expected revision {expected_revision}, "
+                        f"current revision is {record.revision}"
+                    )
+
+                from_status = record.status
+                timeline_action: Literal["acknowledged", "resolved"]
+                if action == "acknowledge":
+                    if record.status == "resolved":
+                        raise InvalidIncidentTransitionError(
+                            "resolved incidents cannot be acknowledged"
+                        )
+                    if record.status == "acknowledged":
+                        return _incident(record)
+                    record.status = "acknowledged"
+                    record.owner = actor
+                    record.acknowledged_at = now
+                    timeline_action = "acknowledged"
+                else:
+                    resolution_note = (note or "").strip()
+                    if len(resolution_note) < 3:
+                        raise InvalidIncidentTransitionError(
+                            "resolution note must contain at least 3 characters"
+                        )
+                    if record.status == "resolved":
+                        return _incident(record)
+                    record.status = "resolved"
+                    record.owner = actor
+                    record.resolved_at = now
+                    record.resolution_note = resolution_note
+                    timeline_action = "resolved"
+
+                record.revision += 1
+                record.updated_at = now
+                session.add(
+                    IncidentTimelineRecord(
+                        timeline_id=str(uuid.uuid4()),
+                        incident_id=record.incident_id,
+                        action=timeline_action,
+                        actor=actor,
+                        note=note,
+                        from_status=from_status,
+                        to_status=record.status,
+                        occurred_at=now,
+                    )
+                )
+                await session.commit()
+                return _incident(record)
+            except (
+                IncidentConflictError,
+                IncidentNotFoundError,
+                InvalidIncidentTransitionError,
+            ):
+                await session.rollback()
+                raise
+            except SQLAlchemyError as exc:
+                await session.rollback()
+                raise StorageUnavailableError("incident transition failed") from exc
 
     async def prune_metric_samples(self, *, before: datetime, batch_size: int) -> int:
         async with self._sessions() as session:

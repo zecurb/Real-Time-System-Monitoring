@@ -15,13 +15,15 @@ Open `http://127.0.0.1:5173`.
 ## Operator workflow
 
 1. Confirm the header reports `Systems ready`.
-2. Check active queue, retry, and dead-letter counts.
-3. Select a monitored node.
-4. Select a metric and a one-, six-, or 24-hour window.
-5. Hover or focus the historical chart points for exact timestamps and values.
-6. Review recent anomalies and resource forecasts, including threshold horizon,
+2. Check active and critical incident counts.
+3. Enter your operator identity, then acknowledge an incident before acting.
+4. Add a clear resolution note and resolve only after mitigation is verified.
+5. Check active queue, retry, and dead-letter counts.
+6. Select a monitored node and historical metric window.
+7. Hover or focus the historical chart points for exact timestamps and values.
+8. Review recent anomalies and resource forecasts, including threshold horizon,
    confidence, execution provider, and backtest error.
-7. If the degraded banner appears, preserve the last-known view and investigate
+9. If the degraded banner appears, preserve the last-known view and investigate
    API readiness before trusting freshness.
 
 ## Production build
@@ -46,3 +48,7 @@ server as a production service.
 - Empty time windows display an intentional empty state.
 - Retry and dead-letter counts receive warning emphasis.
 - Forecast cards show the actual CPU/GPU provider and expose CPU fallback state.
+- Incident actions use optimistic revisions; stale actions fail visibly instead
+  of overwriting a newer operator decision.
+- Resolution is guarded by a required note, and resolved incidents reopen when
+  new evidence arrives.

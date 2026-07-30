@@ -90,6 +90,63 @@ class Forecast:
     fallback_reason: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class IncidentSignal:
+    event_id: str
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    source: Literal["anomaly", "forecast"]
+    severity: Literal["warning", "critical"]
+    title: str
+    summary: str
+    details: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class Incident:
+    incident_id: str
+    node_id: str
+    metric_name: str
+    status: Literal["open", "acknowledged", "resolved"]
+    severity: Literal["warning", "critical"]
+    title: str
+    summary: str
+    occurrence_count: int
+    first_seen: datetime
+    last_seen: datetime
+    owner: str | None
+    acknowledged_at: datetime | None
+    resolved_at: datetime | None
+    resolution_note: str | None
+    revision: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentTimelineEvent:
+    timeline_id: str
+    incident_id: str
+    action: Literal["opened", "escalated", "acknowledged", "resolved", "reopened"]
+    actor: str
+    note: str | None
+    from_status: Literal["open", "acknowledged", "resolved"] | None
+    to_status: Literal["open", "acknowledged", "resolved"]
+    occurred_at: datetime
+
+
+class IncidentNotFoundError(LookupError):
+    """Raised when an incident identifier does not exist."""
+
+
+class IncidentConflictError(RuntimeError):
+    """Raised when a lifecycle update uses a stale revision."""
+
+
+class InvalidIncidentTransitionError(ValueError):
+    """Raised when an incident cannot enter the requested state."""
+
+
 class EventStore(Protocol):
     async def store(self, event: TelemetryEventRequest) -> StoreResult: ...
 
@@ -134,6 +191,31 @@ class EventStore(Protocol):
     async def list_forecasts(
         self, *, node_id: str | None, limit: int
     ) -> list[Forecast]: ...
+
+    async def list_incidents(
+        self,
+        *,
+        status: Literal["open", "acknowledged", "resolved"] | None,
+        node_id: str | None,
+        limit: int,
+    ) -> list[Incident]: ...
+
+    async def incident_timeline(
+        self,
+        *,
+        incident_id: str,
+        limit: int,
+    ) -> list[IncidentTimelineEvent]: ...
+
+    async def transition_incident(
+        self,
+        *,
+        incident_id: str,
+        action: Literal["acknowledge", "resolve"],
+        actor: str,
+        note: str | None,
+        expected_revision: int,
+    ) -> Incident: ...
 
     async def ping(self) -> bool: ...
 

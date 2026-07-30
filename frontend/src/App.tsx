@@ -6,6 +6,7 @@ import type {
   Anomaly,
   Forecast,
   Health,
+  Incident,
   MetricDefinition,
   MetricHistory,
   NodeSummary,
@@ -42,7 +43,11 @@ export default function App() {
   const [history, setHistory] = useState<MetricHistory | null>(null);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [forecasts, setForecasts] = useState<Forecast[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [runtime, setRuntime] = useState<Runtime | null>(null);
+  const [operator, setOperator] = useState("on-call");
+  const [resolutionNotes, setResolutionNotes] = useState<Record<string, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -59,6 +64,7 @@ export default function App() {
           nextMetrics,
           nextAnomalies,
           nextForecasts,
+          nextIncidents,
           nextRuntime
         ] =
           await Promise.all([
@@ -68,6 +74,7 @@ export default function App() {
           api.metrics(controller.signal),
           api.anomalies(anomalyStart, anomalyEnd, controller.signal),
           api.forecasts(controller.signal),
+          api.incidents(controller.signal),
           api.runtime(controller.signal)
         ]);
         setHealth(nextHealth);
@@ -76,6 +83,7 @@ export default function App() {
         setMetrics(nextMetrics);
         setAnomalies(nextAnomalies);
         setForecasts(nextForecasts);
+        setIncidents(nextIncidents);
         setRuntime(nextRuntime);
         setSelectedNode((current) => current || nextNodes[0]?.node_id || "");
         setError(null);
@@ -118,6 +126,51 @@ export default function App() {
     [metrics, selectedMetric]
   );
   const latest = history?.points.at(-1);
+  const activeIncidents = incidents.filter((incident) => incident.status !== "resolved");
+  const criticalIncidents = activeIncidents.filter(
+    (incident) => incident.severity === "critical"
+  );
+
+  const transitionIncident = async (
+    incident: Incident,
+    action: "acknowledge" | "resolve"
+  ) => {
+    const actor = operator.trim();
+    if (!actor) {
+      setActionError("Enter an operator identity before changing an incident.");
+      return;
+    }
+    const note = (resolutionNotes[incident.incident_id] ?? "").trim();
+    if (action === "resolve" && note.length < 3) {
+      setActionError("Add a resolution note with at least 3 characters.");
+      return;
+    }
+    try {
+      const updated =
+        action === "acknowledge"
+          ? await api.acknowledgeIncident(
+              incident.incident_id,
+              actor,
+              incident.revision
+            )
+          : await api.resolveIncident(
+              incident.incident_id,
+              actor,
+              note,
+              incident.revision
+            );
+      setIncidents((current) =>
+        current.map((item) =>
+          item.incident_id === updated.incident_id ? updated : item
+        )
+      );
+      setActionError(null);
+    } catch (caught) {
+      setActionError(
+        caught instanceof Error ? caught.message : "Incident update failed"
+      );
+    }
+  };
 
   return (
     <main>
@@ -177,6 +230,98 @@ export default function App() {
           <strong>{forecasts.length.toLocaleString()}</strong>
           <small>Provider: {runtime?.active.toUpperCase() ?? "checking"}</small>
         </article>
+        <article className={`stat-card ${activeIncidents.length > 0 ? "warning" : ""}`}>
+          <span>Active incidents</span>
+          <strong>{activeIncidents.length.toLocaleString()}</strong>
+          <small>Correlated anomaly and forecast evidence</small>
+        </article>
+        <article className={`stat-card ${criticalIncidents.length > 0 ? "danger" : ""}`}>
+          <span>Critical incidents</span>
+          <strong>{criticalIncidents.length.toLocaleString()}</strong>
+          <small>Immediate operator attention</small>
+        </article>
+      </section>
+
+      <section className="panel incident-panel" aria-label="Incident response queue">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Operator workflow</p>
+            <h2>Incident response queue</h2>
+          </div>
+          <label className="operator-field">
+            Operator identity
+            <input
+              aria-label="Operator identity"
+              value={operator}
+              onChange={(event) => setOperator(event.target.value)}
+            />
+          </label>
+        </div>
+        {actionError && (
+          <div className="action-error" role="alert">
+            {actionError}
+          </div>
+        )}
+        <div className="incident-list">
+          {incidents.length === 0 && (
+            <p className="empty-copy">
+              No incidents. New anomaly and forecast evidence will be correlated here.
+            </p>
+          )}
+          {incidents.slice(0, 20).map((incident) => (
+            <article
+              className={`incident-row ${incident.severity}`}
+              key={incident.incident_id}
+            >
+              <div className="incident-copy">
+                <div className="incident-badges">
+                  <span>{incident.severity}</span>
+                  <span>{incident.status}</span>
+                </div>
+                <strong>{incident.title}</strong>
+                <p>{incident.summary}</p>
+                <small>
+                  {incident.node_id} · {incident.metric_name} ·{" "}
+                  {incident.occurrence_count} occurrences · last seen{" "}
+                  {freshness(incident.last_seen)}
+                  {incident.owner ? ` · owner ${incident.owner}` : ""}
+                </small>
+              </div>
+              <div className="incident-actions">
+                {incident.status === "open" && (
+                  <button
+                    type="button"
+                    onClick={() => void transitionIncident(incident, "acknowledge")}
+                  >
+                    Acknowledge
+                  </button>
+                )}
+                {incident.status !== "resolved" && (
+                  <>
+                    <input
+                      aria-label={`Resolution note for ${incident.title}`}
+                      placeholder="Resolution note"
+                      value={resolutionNotes[incident.incident_id] ?? ""}
+                      onChange={(event) =>
+                        setResolutionNotes((current) => ({
+                          ...current,
+                          [incident.incident_id]: event.target.value
+                        }))
+                      }
+                    />
+                    <button
+                      className="resolve-button"
+                      type="button"
+                      onClick={() => void transitionIncident(incident, "resolve")}
+                    >
+                      Resolve
+                    </button>
+                  </>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="workspace">
@@ -346,8 +491,8 @@ export default function App() {
       </section>
 
       <footer>
-        <span>RT Monitor v0.8</span>
-        <span>CPU/GPU aware · Failure forecasting · Explainable anomalies</span>
+        <span>RT Monitor v0.9</span>
+        <span>Auditable incidents · Failure forecasting · Explainable anomalies</span>
       </footer>
     </main>
   );

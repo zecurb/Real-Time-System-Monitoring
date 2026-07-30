@@ -149,6 +149,24 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(forecasts.status_code, 200)
         self.assertEqual(forecasts.json(), {"forecasts": []})
 
+    def test_exposes_empty_incident_feed_and_unknown_incident_errors(self) -> None:
+        incidents = self.client.get("/v1/incidents")
+        incident_id = "14d6a69e-e40a-42a1-9b45-549d8a949d59"
+        acknowledge = self.client.post(
+            f"/v1/incidents/{incident_id}/acknowledge",
+            json={
+                "actor": "on-call",
+                "note": "Investigating",
+                "expected_revision": 0,
+            },
+        )
+        timeline = self.client.get(f"/v1/incidents/{incident_id}/timeline")
+
+        self.assertEqual(incidents.status_code, 200)
+        self.assertEqual(incidents.json(), {"incidents": []})
+        self.assertEqual(acknowledge.status_code, 404)
+        self.assertEqual(timeline.status_code, 404)
+
     def test_rejects_oversized_metric_query_window(self) -> None:
         response = self.client.get(
             "/v1/metrics/test-node-001",
