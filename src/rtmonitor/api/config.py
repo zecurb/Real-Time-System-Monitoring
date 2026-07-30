@@ -19,13 +19,18 @@ def _positive_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True, slots=True)
 class ApiSettings:
-    buffer_capacity: int = 10_000
     max_request_bytes: int = 65_536
+    database_url: str = "sqlite+aiosqlite:///./rtmonitor.db"
 
     @classmethod
     def from_environment(cls) -> ApiSettings:
+        database_url = os.getenv(
+            "RTMONITOR_DATABASE_URL",
+            "sqlite+aiosqlite:///./rtmonitor.db",
+        ).strip()
+        if not database_url:
+            raise ValueError("RTMONITOR_DATABASE_URL must not be empty")
         return cls(
-            buffer_capacity=_positive_int("RTMONITOR_BUFFER_CAPACITY", 10_000),
             max_request_bytes=_positive_int("RTMONITOR_MAX_REQUEST_BYTES", 65_536),
+            database_url=database_url,
         )
-
