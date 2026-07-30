@@ -18,6 +18,8 @@ is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/health/live` | Confirms the process can serve requests |
 | `GET` | `/health/ready` | Confirms the service can accept another event |
 | `GET` | `/v1/pipeline/status` | Reports queue state and active depth |
+| `GET` | `/v1/nodes` | Discovers monitored nodes by most recent event |
+| `GET` | `/v1/metrics` | Lists normalized metrics and presentation metadata |
 | `GET` | `/v1/metrics/{node_id}` | Returns one historical metric series |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
