@@ -8,9 +8,10 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Literal
+from datetime import datetime, timedelta
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Request, Response, status
+from fastapi import FastAPI, HTTPException, Path, Query, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -19,10 +20,13 @@ from rtmonitor.api.config import ApiSettings
 from rtmonitor.api.contracts import (
     AcceptedResponse,
     HealthResponse,
+    MetricHistoryResponse,
+    MetricPointResponse,
     PipelineStatusResponse,
     TelemetryEventRequest,
 )
 from rtmonitor.api.logging import configure_logging, log_event
+from rtmonitor.api.pagination import decode_metric_cursor, encode_metric_cursor
 from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
 from rtmonitor.storage.sqlalchemy import StorageUnavailableError
 
@@ -53,8 +57,8 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.4.0",
-        description="Validates, stores, and queues versioned telemetry events.",
+        version="0.5.0",
+        description="Ingests telemetry and serves normalized historical metrics.",
         lifespan=lifespan,
     )
 
@@ -155,6 +159,66 @@ def create_app(
             processed=stats.processed,
             dead_letter=stats.dead_letter,
             active_depth=stats.pending + stats.processing + stats.retry,
+        )
+
+    @app.get(
+        "/v1/metrics/{node_id}",
+        response_model=MetricHistoryResponse,
+        responses={400: {"description": "Invalid time range or cursor."}},
+    )
+    async def metric_history(
+        node_id: Annotated[
+            str,
+            Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$"),
+        ],
+        metric: Annotated[str, Query(min_length=1, max_length=128)],
+        start: Annotated[datetime, Query()],
+        end: Annotated[datetime, Query()],
+        limit: Annotated[int, Query(ge=1, le=5000)] = 1000,
+        cursor: Annotated[str | None, Query(max_length=512)] = None,
+    ) -> MetricHistoryResponse:
+        if (
+            start.tzinfo is None
+            or start.utcoffset() is None
+            or end.tzinfo is None
+            or end.utcoffset() is None
+        ):
+            raise HTTPException(status_code=400, detail="start and end must include timezones")
+        if start >= end:
+            raise HTTPException(status_code=400, detail="start must be before end")
+        if end - start > timedelta(days=31):
+            raise HTTPException(status_code=400, detail="query range cannot exceed 31 days")
+        try:
+            decoded_cursor = decode_metric_cursor(cursor) if cursor else None
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid metric cursor") from exc
+
+        samples = await resolved_store.query_metric_samples(
+            node_id=node_id,
+            metric_name=metric,
+            start=start,
+            end=end,
+            limit=limit + 1,
+            cursor=decoded_cursor,
+        )
+        has_more = len(samples) > limit
+        page = samples[:limit]
+        next_cursor = encode_metric_cursor(page[-1]) if has_more and page else None
+        return MetricHistoryResponse(
+            node_id=node_id,
+            metric_name=metric,
+            start=start,
+            end=end,
+            points=[
+                MetricPointResponse(
+                    event_id=uuid.UUID(sample.event_id),
+                    observed_at=sample.observed_at,
+                    value=sample.value,
+                    labels=sample.labels,
+                )
+                for sample in page
+            ],
+            next_cursor=next_cursor,
         )
 
     @app.post(
