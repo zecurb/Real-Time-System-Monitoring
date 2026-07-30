@@ -16,11 +16,15 @@
               python312
               python312Packages.mypy
               python312Packages.ruff
+              stdenv.cc.cc.lib
               jq
               git
+            ];
+
+            LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+              pkgs.stdenv.cc.cc.lib
             ];
           };
         });
     };
 }
-
