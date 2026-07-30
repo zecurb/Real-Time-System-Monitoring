@@ -11,7 +11,9 @@ build/
 .env
 .env.*
 !.env.example
+rtmonitor.db
+rtmonitor.db-shm
+rtmonitor.db-wal
 coverage.xml
 htmlcov/
 .DS_Store
-

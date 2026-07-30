@@ -6,8 +6,8 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from rtmonitor.api.app import create_app
-from rtmonitor.api.buffer import TelemetryBuffer
 from rtmonitor.api.config import ApiSettings
+from rtmonitor.storage.memory import InMemoryEventStore
 
 
 def valid_event() -> dict[str, Any]:
@@ -44,11 +44,11 @@ def valid_event() -> dict[str, Any]:
 
 class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.buffer = TelemetryBuffer(capacity=2)
+        self.store = InMemoryEventStore()
         self.client = TestClient(
             create_app(
-                settings=ApiSettings(buffer_capacity=2, max_request_bytes=65_536),
-                buffer=self.buffer,
+                settings=ApiSettings(max_request_bytes=65_536),
+                store=self.store,
             )
         )
 
@@ -57,9 +57,16 @@ class ApiTests(unittest.TestCase):
         ready = self.client.get("/health/ready")
 
         self.assertEqual(live.status_code, 200)
-        self.assertEqual(live.json()["status"], "ok")
+        self.assertEqual(live.json(), {"status": "ok", "storage": "unchecked"})
         self.assertEqual(ready.status_code, 200)
-        self.assertEqual(ready.json()["status"], "ready")
+        self.assertEqual(ready.json(), {"status": "ready", "storage": "available"})
+
+    def test_readiness_fails_when_storage_is_unavailable(self) -> None:
+        self.store.available = False
+        response = self.client.get("/health/ready")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"status": "not_ready", "storage": "unavailable"})
 
     def test_accepts_valid_telemetry_with_request_id(self) -> None:
         response = self.client.post(
@@ -71,9 +78,18 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()["status"], "accepted")
         self.assertEqual(response.json()["request_id"], "test-request-123")
+        self.assertEqual(response.json()["stored_events"], 1)
         self.assertEqual(response.headers["X-Request-ID"], "test-request-123")
         self.assertIn("X-Process-Time-Ms", response.headers)
-        self.assertEqual(self.buffer.size(), 1)
+
+    def test_duplicate_event_is_idempotent(self) -> None:
+        first = self.client.post("/v1/telemetry", json=valid_event())
+        duplicate = self.client.post("/v1/telemetry", json=valid_event())
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(duplicate.status_code, 202)
+        self.assertEqual(duplicate.json()["status"], "duplicate")
+        self.assertEqual(duplicate.json()["stored_events"], 1)
 
     def test_rejects_unknown_schema_version(self) -> None:
         event = valid_event()
@@ -83,8 +99,6 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "validation_error")
-        self.assertIn("request_id", response.json())
-        self.assertEqual(self.buffer.size(), 0)
 
     def test_rejects_naive_timestamp(self) -> None:
         event = valid_event()
@@ -93,24 +107,6 @@ class ApiTests(unittest.TestCase):
         response = self.client.post("/v1/telemetry", json=event)
 
         self.assertEqual(response.status_code, 422)
-        self.assertEqual(self.buffer.size(), 0)
-
-    def test_applies_backpressure_when_buffer_is_full(self) -> None:
-        self.assertEqual(self.client.post("/v1/telemetry", json=valid_event()).status_code, 202)
-        second_event = valid_event()
-        second_event["event_id"] = "24d6a69e-e40a-42a1-9b45-549d8a949d59"
-        self.assertEqual(self.client.post("/v1/telemetry", json=second_event).status_code, 202)
-        third_event = valid_event()
-        third_event["event_id"] = "34d6a69e-e40a-42a1-9b45-549d8a949d59"
-
-        rejected = self.client.post("/v1/telemetry", json=third_event)
-        readiness = self.client.get("/health/ready")
-
-        self.assertEqual(rejected.status_code, 503)
-        self.assertEqual(rejected.headers["Retry-After"], "5")
-        self.assertEqual(readiness.status_code, 503)
-        self.assertEqual(readiness.json()["status"], "not_ready")
-        self.assertEqual(self.buffer.size(), 2)
 
     def test_rejects_oversized_declared_body(self) -> None:
         response = self.client.post(

@@ -10,7 +10,9 @@ Resume skills move through: **introduced**, **practiced**, **demonstrated**, and
 | API development | Practiced | Validated FastAPI ingestion contract, health endpoints, and tests | Run, explain, and modify endpoints |
 | Observability | Practiced | Correlation IDs, structured request logs, timing headers, and health checks | Add service metrics and traces |
 | Maintainable systems | Practiced | Application factory, typed contracts, configuration, tests, ADRs, and runbooks | Review and extend the design |
-| Resilient infrastructure | Practiced | Bounded buffering, explicit backpressure, graceful shutdown, and failure responses | Dependency failure and recovery tests |
+| SQL and databases | Practiced | SQLAlchemy event model, indexes, migrations, and PostgreSQL configuration | Run queries and explain schema tradeoffs |
+| Durable storage | Practiced | Restart persistence and idempotent event ingestion tests | Validate PostgreSQL backup and recovery |
+| Resilient infrastructure | Practiced | Storage-aware readiness, idempotency, graceful shutdown, and failure responses | PostgreSQL dependency failure and recovery tests |
 | Distributed systems | Introduced | Architecture and event-delivery constraints | Durable partitioned transport |
 | Time-series analysis | Introduced | Metric event contract | Store and analyze historical series |
 | Machine learning | Introduced | Prediction requirements | Train and evaluate baseline model |

@@ -63,14 +63,12 @@ class TelemetryEventRequest(StrictModel):
 
 
 class AcceptedResponse(StrictModel):
-    status: Literal["accepted"]
+    status: Literal["accepted", "duplicate"]
     event_id: UUID
     request_id: str
-    buffered_events: NonNegativeInt
+    stored_events: NonNegativeInt
 
 
 class HealthResponse(StrictModel):
     status: Literal["ok", "ready", "not_ready"]
-    buffered_events: NonNegativeInt
-    buffer_capacity: Annotated[int, Field(ge=1)]
-
+    storage: Literal["unchecked", "available", "unavailable"]

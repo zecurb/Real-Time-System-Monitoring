@@ -1,4 +1,4 @@
-"""FastAPI application factory for telemetry ingestion."""
+"""FastAPI application factory for durable telemetry ingestion."""
 
 from __future__ import annotations
 
@@ -6,17 +6,20 @@ import logging
 import re
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from rtmonitor.api.buffer import TelemetryBuffer
 from rtmonitor.api.config import ApiSettings
 from rtmonitor.api.contracts import AcceptedResponse, HealthResponse, TelemetryEventRequest
 from rtmonitor.api.logging import configure_logging, log_event
+from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
+from rtmonitor.storage.sqlalchemy import StorageUnavailableError
 
 LOGGER = logging.getLogger("rtmonitor.api")
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
@@ -32,18 +35,23 @@ def _request_id(request: Request) -> str:
 def create_app(
     *,
     settings: ApiSettings | None = None,
-    buffer: TelemetryBuffer | None = None,
+    store: EventStore | None = None,
 ) -> FastAPI:
     configure_logging()
     resolved_settings = settings or ApiSettings.from_environment()
-    resolved_buffer = buffer or TelemetryBuffer(resolved_settings.buffer_capacity)
+    resolved_store = store or SqlAlchemyEventStore(resolved_settings.database_url)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        await resolved_store.close()
+
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.2.0",
-        description="Validates and buffers versioned telemetry events.",
+        version="0.3.0",
+        description="Validates and durably stores versioned telemetry events.",
+        lifespan=lifespan,
     )
-    app.state.settings = resolved_settings
-    app.state.buffer = resolved_buffer
 
     @app.middleware("http")
     async def request_context(
@@ -116,42 +124,21 @@ def create_app(
             status_code=exc.status_code,
             headers=exc.headers,
             content={
-                "error": {
-                    "code": "service_unavailable"
-                    if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-                    else "http_error",
-                    "message": str(exc.detail),
-                },
+                "error": {"code": "http_error", "message": str(exc.detail)},
                 "request_id": request.state.request_id,
             },
         )
 
     @app.get("/health/live", response_model=HealthResponse)
     async def liveness() -> HealthResponse:
-        return HealthResponse(
-            status="ok",
-            buffered_events=resolved_buffer.size(),
-            buffer_capacity=resolved_buffer.capacity,
-        )
+        return HealthResponse(status="ok", storage="unchecked")
 
-    @app.get(
-        "/health/ready",
-        response_model=HealthResponse,
-        responses={503: {"description": "The ingestion buffer is full."}},
-    )
+    @app.get("/health/ready", response_model=HealthResponse)
     async def readiness(response: Response) -> HealthResponse:
-        if resolved_buffer.is_full():
+        if not await resolved_store.ping():
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-            return HealthResponse(
-                status="not_ready",
-                buffered_events=resolved_buffer.size(),
-                buffer_capacity=resolved_buffer.capacity,
-            )
-        return HealthResponse(
-            status="ready",
-            buffered_events=resolved_buffer.size(),
-            buffer_capacity=resolved_buffer.capacity,
-        )
+            return HealthResponse(status="not_ready", storage="unavailable")
+        return HealthResponse(status="ready", storage="available")
 
     @app.post(
         "/v1/telemetry",
@@ -160,32 +147,39 @@ def create_app(
         responses={
             413: {"description": "Request body is too large."},
             422: {"description": "Telemetry validation failed."},
-            503: {"description": "The ingestion buffer is full."},
+            503: {"description": "Durable storage is unavailable."},
         },
     )
     async def ingest(event: TelemetryEventRequest, request: Request) -> AcceptedResponse:
-        if not resolved_buffer.accept(event):
+        try:
+            result = await resolved_store.store(event)
+            stored_events = await resolved_store.count()
+        except StorageUnavailableError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="ingestion buffer is full",
+                detail="durable telemetry storage is unavailable",
                 headers={"Retry-After": "5"},
-            )
+            ) from exc
+
+        response_status: Literal["accepted", "duplicate"]
+        response_status = "duplicate" if result is StoreResult.DUPLICATE else "accepted"
         log_event(
             LOGGER,
-            "telemetry_accepted",
+            "telemetry_stored",
             {
                 "request_id": request.state.request_id,
                 "event_id": event.event_id,
                 "node_id": event.node_id,
                 "schema_version": event.schema_version,
-                "buffered_events": resolved_buffer.size(),
+                "result": result,
+                "stored_events": stored_events,
             },
         )
         return AcceptedResponse(
-            status="accepted",
+            status=response_status,
             event_id=event.event_id,
             request_id=request.state.request_id,
-            buffered_events=resolved_buffer.size(),
+            stored_events=stored_events,
         )
 
     return app

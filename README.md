@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 2 — telemetry ingestion API.
+> Status: Phase 3 — durable telemetry storage.
 
 ## Current capabilities
 
@@ -20,7 +20,9 @@ actionable evidence to engineers during incidents.
   telemetry.
 - Validates versioned telemetry through a FastAPI ingestion service.
 - Provides request correlation, structured logs, health checks, payload limits,
-  and explicit backpressure through a bounded buffer.
+  and storage-aware readiness.
+- Persists telemetry through SQLAlchemy with idempotent event IDs, Alembic
+  migrations, PostgreSQL production support, and SQLite development support.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -54,6 +56,7 @@ rtmonitor --once
 Start the ingestion API:
 
 ```bash
+alembic upgrade head
 rtmonitor-api
 ```
 
@@ -91,7 +94,7 @@ nix develop
 
 1. Linux telemetry collector
 2. Versioned event contracts and ingestion API
-3. Durable event streaming with backpressure
+3. Durable event storage and idempotent ingestion
 4. Time-series and log storage
 5. Incident-focused React dashboard
 6. Anomaly detection and resource forecasting
