@@ -94,5 +94,9 @@ targets have been validated. See [CONTRIBUTING.md](CONTRIBUTING.md) and the
 
 ## License
 
-MIT
+Copyright (c) 2026 Nehemiah Boyce. All rights reserved.
 
+This is source-visible proprietary software. The public repository may be
+viewed for portfolio and evaluation purposes, but it does not grant permission
+to use, copy, modify, distribute, deploy, sublicense, or sell the software.
+Commercial use requires a separate written license. See [LICENSE](LICENSE).
