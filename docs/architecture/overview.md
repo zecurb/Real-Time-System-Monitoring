@@ -22,13 +22,16 @@ when dependencies fail.
 - Host identity is anonymized by default.
 - Collection errors are explicit and never emitted as valid metric events.
 - Continuous collection responds to termination signals for graceful shutdown.
-- Future transport consumers must be idempotent because delivery may be
-  repeated.
+- Processing is at-least-once, so consumers must be idempotent because
+  delivery may be repeated.
+- Ingestion and processing are decoupled through an atomic durable queue.
+- Worker leases recover abandoned work after a process failure.
 
 ## Scaling path
 
-Phase 1 emits JSON Lines locally. Later phases introduce an authenticated
-ingestion boundary and durable Kafka-compatible transport. Partitioning,
-consumer groups, batching, retention, backpressure, and dead-letter handling
-will be added only alongside tests that demonstrate their behavior.
-
+Phase 4 provides bounded batches, competing workers, lease recovery, retry,
+and dead-letter handling through PostgreSQL. This deliberately establishes the
+delivery contract before adding a separate broker. Load tests will determine
+when a Kafka-compatible transport is justified. Partitioning, consumer groups,
+and retention will be added only alongside tests that demonstrate their
+behavior.
