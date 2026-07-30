@@ -40,3 +40,16 @@ export interface MetricHistory {
   points: MetricPoint[];
   next_cursor: string | null;
 }
+
+export interface Anomaly {
+  event_id: string;
+  node_id: string;
+  metric_name: string;
+  observed_at: string;
+  value: number;
+  baseline: number;
+  dispersion: number;
+  score: number;
+  severity: "warning" | "critical";
+  sample_count: number;
+}

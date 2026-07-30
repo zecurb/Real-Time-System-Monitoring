@@ -119,3 +119,20 @@ class MetricDefinitionResponse(StrictModel):
 
 class MetricCatalogResponse(StrictModel):
     metrics: list[MetricDefinitionResponse]
+
+
+class AnomalyResponse(StrictModel):
+    event_id: UUID
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    value: float
+    baseline: float
+    dispersion: NonNegativeFloat
+    score: NonNegativeFloat
+    severity: Literal["warning", "critical"]
+    sample_count: NonNegativeInt
+
+
+class AnomalyListResponse(StrictModel):
+    anomalies: list[AnomalyResponse]

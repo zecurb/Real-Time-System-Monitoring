@@ -1,4 +1,5 @@
 import type {
+  Anomaly,
   Health,
   MetricDefinition,
   MetricHistory,
@@ -42,5 +43,15 @@ export const api = {
       `/v1/metrics/${encodeURIComponent(nodeId)}?${params}`,
       signal
     );
+  },
+  anomalies: async (start: Date, end: Date, signal?: AbortSignal) => {
+    const params = new URLSearchParams({
+      start: start.toISOString(),
+      end: end.toISOString(),
+      limit: "100"
+    });
+    return (
+      await request<{ anomalies: Anomaly[] }>(`/v1/anomalies?${params}`, signal)
+    ).anomalies;
   }
 };

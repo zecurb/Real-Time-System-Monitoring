@@ -103,3 +103,28 @@ class MetricSampleRecord(Base):
         ),
         Index("ix_metric_samples_observed_at", "observed_at"),
     )
+
+
+class AnomalyRecord(Base):
+    __tablename__ = "anomalies"
+
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("telemetry_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    baseline: Mapped[float] = mapped_column(Float, nullable=False)
+    dispersion: Mapped[float] = mapped_column(Float, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    severity: Mapped[str] = mapped_column(String(16), nullable=False)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_anomalies_node_observed", "node_id", "observed_at"),
+        Index("ix_anomalies_severity_observed", "severity", "observed_at"),
+    )

@@ -56,6 +56,24 @@ describe("Incident Console", () => {
             ]
           });
         }
+        if (path.startsWith("/v1/anomalies?")) {
+          return response({
+            anomalies: [
+              {
+                event_id: "14d6a69e-e40a-42a1-9b45-549d8a949d59",
+                node_id: "node-001",
+                metric_name: "memory.used.percent",
+                observed_at: "2026-07-30T06:30:00Z",
+                value: 90,
+                baseline: 26.9,
+                dispersion: 1.2,
+                score: 8.1,
+                severity: "critical",
+                sample_count: 20
+              }
+            ]
+          });
+        }
         if (path.startsWith("/v1/metrics/node-001?")) {
           return response({
             node_id: "node-001",
@@ -80,11 +98,13 @@ describe("Incident Console", () => {
     render(<App />);
 
     expect(await screen.findByText("Systems ready")).toBeInTheDocument();
-    expect(screen.getAllByText("node-001")).toHaveLength(2);
+    expect(screen.getAllByText("node-001")).toHaveLength(3);
     await waitFor(() =>
       expect(screen.getAllByText("26.9%").length).toBeGreaterThan(0)
     );
     expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("Recent anomalies")).toBeInTheDocument();
+    expect(screen.getByText("Score 8.1 · baseline 26.9")).toBeInTheDocument();
   });
 
   it("shows an explicit degraded state when refresh fails", async () => {
