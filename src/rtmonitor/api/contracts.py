@@ -67,8 +67,18 @@ class AcceptedResponse(StrictModel):
     event_id: UUID
     request_id: str
     stored_events: NonNegativeInt
+    queue_depth: NonNegativeInt
 
 
 class HealthResponse(StrictModel):
     status: Literal["ok", "ready", "not_ready"]
     storage: Literal["unchecked", "available", "unavailable"]
+
+
+class PipelineStatusResponse(StrictModel):
+    pending: NonNegativeInt
+    processing: NonNegativeInt
+    retry: NonNegativeInt
+    processed: NonNegativeInt
+    dead_letter: NonNegativeInt
+    active_depth: NonNegativeInt
