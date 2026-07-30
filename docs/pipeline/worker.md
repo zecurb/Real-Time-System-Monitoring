@@ -2,6 +2,8 @@
 
 The worker separates ingestion latency from downstream processing. The API
 stores each telemetry event and queue record atomically, then returns HTTP 202.
+The Phase 5 processor normalizes each event into indexed historical metric
+samples before completing the queue lease.
 
 ## Run
 
