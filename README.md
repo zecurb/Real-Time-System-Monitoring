@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 1 — Linux telemetry collector foundation.
+> Status: Phase 2 — telemetry ingestion API.
 
 ## Current capabilities
 
@@ -18,6 +18,9 @@ actionable evidence to engineers during incidents.
 - Runs on headless, CPU-only Linux systems; no GPU is required.
 - Handles shutdown signals and collection errors without producing malformed
   telemetry.
+- Validates versioned telemetry through a FastAPI ingestion service.
+- Provides request correlation, structured logs, health checks, payload limits,
+  and explicit backpressure through a bounded buffer.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -47,6 +50,15 @@ source .venv/bin/activate
 python -m pip install -e ".[dev]"
 rtmonitor --once
 ```
+
+Start the ingestion API:
+
+```bash
+rtmonitor-api
+```
+
+Then open `http://127.0.0.1:8000/docs`. See the
+[ingestion API guide](docs/api/ingestion.md) for contracts and limitations.
 
 Run continuously at a five-second interval:
 
