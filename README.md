@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 4 — durable distributed processing foundation.
+> Status: Phase 5 — normalized time-series storage and historical queries.
 
 ## Current capabilities
 
@@ -27,6 +27,10 @@ actionable evidence to engineers during incidents.
 - Runs independent CPU-only workers with bounded batches, expiring leases,
   competing-worker isolation, exponential retry, and dead-letter handling.
 - Reports pipeline depth and per-state totals for incident visibility.
+- Normalizes every telemetry event into 14 indexed metric samples using
+  conflict-safe, retry-idempotent bulk writes.
+- Serves bounded historical queries with stable cursor pagination.
+- Prunes expired metric samples in bounded retention batches.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -80,6 +84,21 @@ rtmonitor-worker --once
 curl http://127.0.0.1:8000/v1/pipeline/status
 ```
 
+Query historical memory utilization:
+
+```bash
+curl --get http://127.0.0.1:8000/v1/metrics/NODE_ID \
+  --data-urlencode "metric=memory.used.percent" \
+  --data-urlencode "start=2026-07-30T00:00:00+00:00" \
+  --data-urlencode "end=2026-07-31T00:00:00+00:00" | jq .
+```
+
+Prune samples older than 30 days in bounded batches:
+
+```bash
+rtmonitor-retention --days 30
+```
+
 Run continuously at a five-second interval:
 
 ```bash
@@ -113,7 +132,7 @@ nix develop
 2. Versioned event contracts and ingestion API
 3. Durable event storage and idempotent ingestion
 4. Durable distributed processing foundation
-5. Time-series and log storage
+5. Normalized time-series storage and historical query APIs
 6. Incident-focused React dashboard
 7. Anomaly detection and resource forecasting
 8. Multi-node deployment, load testing, and failure injection
