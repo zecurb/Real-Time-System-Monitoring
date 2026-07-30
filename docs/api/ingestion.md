@@ -18,6 +18,7 @@ is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/health/live` | Confirms the process can serve requests |
 | `GET` | `/health/ready` | Confirms the service can accept another event |
 | `GET` | `/v1/pipeline/status` | Reports queue state and active depth |
+| `GET` | `/v1/metrics/{node_id}` | Returns one historical metric series |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
 Accepted and duplicate events return HTTP `202`. Invalid contracts return `422`. Requests
@@ -64,3 +65,21 @@ chunked requests, until a streaming body-limit middleware is implemented.
 
 See the [storage guide](../storage/postgresql.md) for PostgreSQL startup and
 migration commands.
+
+## Historical metric queries
+
+Historical queries require `metric`, `start`, and `end`. Timestamps must
+include timezones, `start` must be before `end`, and one request cannot span
+more than 31 days. `limit` defaults to 1000 and cannot exceed 5000.
+
+Results are ordered by observation time and event ID. When `next_cursor` is
+present, pass it unchanged as the next request's `cursor`. Cursors are opaque;
+clients must not construct or modify them.
+
+The normalized metric names are:
+
+- `system.load.1m`, `system.load.5m`, `system.load.15m`
+- `system.cpu.count`, `system.uptime.seconds`, `system.process.count`
+- `memory.total.bytes`, `memory.available.bytes`, `memory.used.percent`
+- `disk.total.bytes`, `disk.free.bytes`, `disk.used.percent`
+- `network.received.bytes`, `network.transmitted.bytes`
