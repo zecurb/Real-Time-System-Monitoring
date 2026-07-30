@@ -62,3 +62,15 @@ keeps the production bundle small and provides an accessible image label and
 point-level tooltips. Development uses Vite's same-origin proxy. Production
 deployments serve the compiled static assets behind the same reverse proxy as
 the API.
+
+## Anomaly-detection boundary
+
+The Phase 7 worker scores selected non-cumulative metrics after normalization.
+Each node and metric receives its own median/MAD baseline over up to 120 prior
+samples from seven days. Findings use `(event_id, metric_name)` uniqueness, so
+worker retries cannot duplicate an anomaly.
+
+The detector intentionally runs inside the durable leased processing path. A
+failed analysis therefore uses the existing retry and dead-letter contract.
+The dashboard reads bounded findings from `/v1/anomalies`; it does not perform
+or reinterpret scoring in the browser.

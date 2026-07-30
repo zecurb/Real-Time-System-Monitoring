@@ -19,6 +19,8 @@ from fastapi.responses import JSONResponse
 from rtmonitor.api.config import ApiSettings
 from rtmonitor.api.contracts import (
     AcceptedResponse,
+    AnomalyListResponse,
+    AnomalyResponse,
     HealthResponse,
     MetricCatalogResponse,
     MetricDefinitionResponse,
@@ -62,8 +64,8 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.6.0",
-        description="Ingests telemetry and serves an incident-focused monitoring console.",
+        version="0.7.0",
+        description="Ingests telemetry and serves explainable CPU-based anomaly findings.",
         lifespan=lifespan,
     )
 
@@ -193,6 +195,48 @@ def create_app(
                     category=definition.category,
                 )
                 for definition in METRIC_DEFINITIONS
+            ]
+        )
+
+    @app.get("/v1/anomalies", response_model=AnomalyListResponse)
+    async def anomalies(
+        start: Annotated[datetime, Query()],
+        end: Annotated[datetime, Query()],
+        node_id: Annotated[str | None, Query(min_length=3, max_length=128)] = None,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> AnomalyListResponse:
+        if (
+            start.tzinfo is None
+            or start.utcoffset() is None
+            or end.tzinfo is None
+            or end.utcoffset() is None
+        ):
+            raise HTTPException(status_code=400, detail="start and end must include timezones")
+        if start >= end:
+            raise HTTPException(status_code=400, detail="start must be before end")
+        if end - start > timedelta(days=31):
+            raise HTTPException(status_code=400, detail="query range cannot exceed 31 days")
+        findings = await resolved_store.list_anomalies(
+            node_id=node_id,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+        return AnomalyListResponse(
+            anomalies=[
+                AnomalyResponse(
+                    event_id=uuid.UUID(finding.event_id),
+                    node_id=finding.node_id,
+                    metric_name=finding.metric_name,
+                    observed_at=finding.observed_at,
+                    value=finding.value,
+                    baseline=finding.baseline,
+                    dispersion=finding.dispersion,
+                    score=finding.score,
+                    severity=finding.severity,
+                    sample_count=finding.sample_count,
+                )
+                for finding in findings
             ]
         )
 

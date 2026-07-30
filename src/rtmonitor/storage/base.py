@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from rtmonitor.api.contracts import TelemetryEventRequest
 
@@ -56,6 +56,20 @@ class NodeSummary:
     event_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class Anomaly:
+    event_id: str
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    value: float
+    baseline: float
+    dispersion: float
+    score: float
+    severity: Literal["warning", "critical"]
+    sample_count: int
+
+
 class EventStore(Protocol):
     async def store(self, event: TelemetryEventRequest) -> StoreResult: ...
 
@@ -77,6 +91,15 @@ class EventStore(Protocol):
     ) -> list[MetricSample]: ...
 
     async def list_nodes(self, *, limit: int) -> list[NodeSummary]: ...
+
+    async def list_anomalies(
+        self,
+        *,
+        node_id: str | None,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[Anomaly]: ...
 
     async def ping(self) -> bool: ...
 

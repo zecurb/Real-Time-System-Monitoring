@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 6 — incident-focused React dashboard.
+> Status: Phase 7 — explainable CPU-based anomaly detection.
 
 ## Current capabilities
 
@@ -34,6 +34,8 @@ actionable evidence to engineers during incidents.
 - Provides a responsive React and TypeScript incident console with node
   discovery, pipeline health, historical charts, resilient auto-refresh, and
   explicit degraded-data states.
+- Detects unusual load, process, memory, and disk behavior with robust
+  per-node median/MAD baselines and durable, explainable severity findings.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -96,6 +98,14 @@ curl --get http://127.0.0.1:8000/v1/metrics/NODE_ID \
   --data-urlencode "end=2026-07-31T00:00:00+00:00" | jq .
 ```
 
+Query anomalies detected in a bounded window:
+
+```bash
+curl --get http://127.0.0.1:8000/v1/anomalies \
+  --data-urlencode "start=2026-07-30T00:00:00+00:00" \
+  --data-urlencode "end=2026-07-31T00:00:00+00:00" | jq .
+```
+
 Prune samples older than 30 days in bounded batches:
 
 ```bash
@@ -148,8 +158,10 @@ nix develop
 4. Durable distributed processing foundation
 5. Normalized time-series storage and historical query APIs
 6. Incident-focused React and TypeScript dashboard
-7. Anomaly detection and resource forecasting
-8. Multi-node deployment, load testing, and failure injection
+7. Explainable CPU-based anomaly detection
+8. Resource forecasting and failure-risk prediction
+9. Alerts and incident workflows
+10. Multi-node deployment, security, load testing, and failure injection
 
 ## Production-readiness policy
 

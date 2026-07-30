@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { formatValue, MetricChart } from "./components/MetricChart";
 import type {
+  Anomaly,
   Health,
   MetricDefinition,
   MetricHistory,
@@ -37,6 +38,7 @@ export default function App() {
   const [selectedMetric, setSelectedMetric] = useState("memory.used.percent");
   const [windowHours, setWindowHours] = useState(1);
   const [history, setHistory] = useState<MetricHistory | null>(null);
+  const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -44,16 +46,21 @@ export default function App() {
     const controller = new AbortController();
     const refreshOverview = async () => {
       try {
-        const [nextHealth, nextPipeline, nextNodes, nextMetrics] = await Promise.all([
+        const anomalyEnd = new Date();
+        const anomalyStart = new Date(anomalyEnd.getTime() - 24 * 60 * 60 * 1000);
+        const [nextHealth, nextPipeline, nextNodes, nextMetrics, nextAnomalies] =
+          await Promise.all([
           api.health(controller.signal),
           api.pipeline(controller.signal),
           api.nodes(controller.signal),
-          api.metrics(controller.signal)
+          api.metrics(controller.signal),
+          api.anomalies(anomalyStart, anomalyEnd, controller.signal)
         ]);
         setHealth(nextHealth);
         setPipeline(nextPipeline);
         setNodes(nextNodes);
         setMetrics(nextMetrics);
+        setAnomalies(nextAnomalies);
         setSelectedNode((current) => current || nextNodes[0]?.node_id || "");
         setError(null);
         setLastUpdated(new Date());
@@ -143,6 +150,11 @@ export default function App() {
           <span>Dead letters</span>
           <strong>{pipeline.dead_letter.toLocaleString()}</strong>
           <small>Requires engineering review</small>
+        </article>
+        <article className={`stat-card ${anomalies.length > 0 ? "warning" : ""}`}>
+          <span>Anomalies (24h)</span>
+          <strong>{anomalies.length.toLocaleString()}</strong>
+          <small>Explainable statistical findings</small>
         </article>
       </section>
 
@@ -243,12 +255,42 @@ export default function App() {
               </button>
             ))}
           </div>
+          <div className="anomaly-section">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Detection</p>
+                <h2>Recent anomalies</h2>
+              </div>
+              <span className="count-badge">{anomalies.length}</span>
+            </div>
+            <div className="anomaly-list">
+              {anomalies.length === 0 && (
+                <p className="empty-copy">No anomalies detected in the last 24 hours.</p>
+              )}
+              {anomalies.slice(0, 8).map((anomaly) => (
+                <article
+                  className={`anomaly-row ${anomaly.severity}`}
+                  key={`${anomaly.event_id}-${anomaly.metric_name}`}
+                >
+                  <div>
+                    <strong>{anomaly.metric_name}</strong>
+                    <small>{anomaly.node_id}</small>
+                  </div>
+                  <span>{anomaly.severity}</span>
+                  <small>
+                    Score {anomaly.score.toFixed(1)} · baseline{" "}
+                    {anomaly.baseline.toFixed(1)}
+                  </small>
+                </article>
+              ))}
+            </div>
+          </div>
         </aside>
       </section>
 
       <footer>
-        <span>RT Monitor v0.6</span>
-        <span>CPU-first · At-least-once processing · Historical telemetry</span>
+        <span>RT Monitor v0.7</span>
+        <span>CPU-first · Explainable anomalies · Historical telemetry</span>
       </footer>
     </main>
   );

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from rtmonitor.api.contracts import TelemetryEventRequest
-from rtmonitor.storage.base import MetricSample, NodeSummary, QueueStats, StoreResult
+from rtmonitor.storage.base import Anomaly, MetricSample, NodeSummary, QueueStats, StoreResult
 
 
 class InMemoryEventStore:
@@ -42,6 +42,16 @@ class InMemoryEventStore:
         return []
 
     async def list_nodes(self, *, limit: int) -> list[NodeSummary]:
+        return []
+
+    async def list_anomalies(
+        self,
+        *,
+        node_id: str | None,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[Anomaly]:
         return []
 
     async def ping(self) -> bool:

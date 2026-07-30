@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal, cast
 
 from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
@@ -11,9 +12,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.sql import Executable
 
+from rtmonitor.anomaly import SCORABLE_METRICS, robust_anomaly_score
 from rtmonitor.api.contracts import TelemetryEventRequest
 from rtmonitor.metrics import metric_values
 from rtmonitor.storage.base import (
+    Anomaly,
     MetricSample,
     NodeSummary,
     QueueLease,
@@ -22,6 +25,7 @@ from rtmonitor.storage.base import (
     StoreResult,
 )
 from rtmonitor.storage.models import (
+    AnomalyRecord,
     Base,
     MetricSampleRecord,
     PipelineQueueRecord,
@@ -273,6 +277,63 @@ class SqlAlchemyEventStore:
                 raise StorageUnavailableError("metric sample write failed") from exc
         return len(rows)
 
+    async def process_telemetry(self, payload: dict[str, object]) -> None:
+        """Normalize telemetry and persist explainable anomaly findings idempotently."""
+        event = TelemetryEventRequest.model_validate(payload)
+        await self.write_metric_samples(payload)
+        values = metric_values(event)
+        findings: list[dict[str, object]] = []
+        for metric_name in SCORABLE_METRICS:
+            history = await self.query_metric_samples(
+                node_id=event.node_id,
+                metric_name=metric_name,
+                start=event.observed_at - timedelta(days=7),
+                end=event.observed_at,
+                limit=120,
+            )
+            result = robust_anomaly_score(values[metric_name], [sample.value for sample in history])
+            if result is None:
+                continue
+            findings.append(
+                {
+                    "event_id": str(event.event_id),
+                    "node_id": event.node_id,
+                    "metric_name": metric_name,
+                    "observed_at": event.observed_at,
+                    "value": values[metric_name],
+                    "baseline": result.baseline,
+                    "dispersion": result.dispersion,
+                    "score": result.score,
+                    "severity": result.severity,
+                    "sample_count": result.sample_count,
+                    "created_at": datetime.now(UTC),
+                }
+            )
+        if not findings:
+            return
+        statement: Executable
+        if self._engine.dialect.name == "postgresql":
+            statement = (
+                postgresql_insert(AnomalyRecord)
+                .values(findings)
+                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+            )
+        elif self._engine.dialect.name == "sqlite":
+            statement = (
+                sqlite_insert(AnomalyRecord)
+                .values(findings)
+                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+            )
+        else:
+            raise StorageUnavailableError("unsupported anomaly storage dialect")
+        async with self._sessions() as session:
+            try:
+                await session.execute(statement)
+                await session.commit()
+            except SQLAlchemyError as exc:
+                await session.rollback()
+                raise StorageUnavailableError("anomaly write failed") from exc
+
     async def query_metric_samples(
         self,
         *,
@@ -332,6 +393,43 @@ class SqlAlchemyEventStore:
                 event_count=int(event_count),
             )
             for node_id, last_seen, event_count in rows
+        ]
+
+    async def list_anomalies(
+        self,
+        *,
+        node_id: str | None,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[Anomaly]:
+        statement = (
+            select(AnomalyRecord)
+            .where(
+                AnomalyRecord.observed_at >= start,
+                AnomalyRecord.observed_at < end,
+            )
+            .order_by(AnomalyRecord.observed_at.desc(), AnomalyRecord.metric_name)
+            .limit(limit)
+        )
+        if node_id is not None:
+            statement = statement.where(AnomalyRecord.node_id == node_id)
+        async with self._sessions() as session:
+            records = (await session.scalars(statement)).all()
+        return [
+            Anomaly(
+                event_id=record.event_id,
+                node_id=record.node_id,
+                metric_name=record.metric_name,
+                observed_at=_utc(record.observed_at),
+                value=record.value,
+                baseline=record.baseline,
+                dispersion=record.dispersion,
+                score=record.score,
+                severity=cast(Literal["warning", "critical"], record.severity),
+                sample_count=record.sample_count,
+            )
+            for record in records
         ]
 
     async def prune_metric_samples(self, *, before: datetime, batch_size: int) -> int:

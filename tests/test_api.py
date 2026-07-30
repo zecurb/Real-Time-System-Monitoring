@@ -128,6 +128,18 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(nodes.status_code, 200)
         self.assertEqual(nodes.json(), {"nodes": []})
 
+    def test_returns_bounded_anomaly_feed(self) -> None:
+        response = self.client.get(
+            "/v1/anomalies",
+            params={
+                "start": "2026-07-01T00:00:00+00:00",
+                "end": "2026-07-02T00:00:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"anomalies": []})
+
     def test_rejects_oversized_metric_query_window(self) -> None:
         response = self.client.get(
             "/v1/metrics/test-node-001",

@@ -66,7 +66,7 @@ class PipelineWorker:
     ) -> None:
         self._store = store
         self._settings = settings
-        self._processor = processor or self._store.write_metric_samples
+        self._processor = processor or self._store.process_telemetry
         self.worker_id = worker_id or f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
 
     async def process_batch(self) -> int:

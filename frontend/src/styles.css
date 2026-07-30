@@ -110,7 +110,7 @@ h2 {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-top: 34px;
 }
@@ -379,6 +379,64 @@ button:focus-visible {
   color: #718981;
   font-size: 0.82rem;
   text-align: center;
+}
+
+.anomaly-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid #19302a;
+}
+
+.anomaly-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.anomaly-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 10px;
+  padding: 11px;
+  border: 1px solid rgba(236, 179, 90, 0.35);
+  border-radius: 9px;
+  background: rgba(236, 179, 90, 0.06);
+}
+
+.anomaly-row.critical {
+  border-color: rgba(255, 99, 114, 0.5);
+  background: rgba(255, 99, 114, 0.07);
+}
+
+.anomaly-row strong,
+.anomaly-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.anomaly-row strong {
+  font-size: 0.7rem;
+}
+
+.anomaly-row span {
+  color: #ecb35a;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.anomaly-row.critical span {
+  color: #ff6372;
+}
+
+.anomaly-row > small,
+.anomaly-row div small {
+  color: #718981;
+  font-size: 0.62rem;
+}
+
+.anomaly-row > small {
+  grid-column: 1 / -1;
 }
 
 footer {
