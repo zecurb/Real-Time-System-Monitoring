@@ -16,6 +16,7 @@
               python312
               python312Packages.mypy
               python312Packages.ruff
+              nodejs_24
               stdenv.cc.cc.lib
               jq
               git
