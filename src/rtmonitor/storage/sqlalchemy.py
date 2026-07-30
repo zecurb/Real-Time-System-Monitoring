@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from sqlalchemy.sql import Executable
 
 from rtmonitor.api.contracts import TelemetryEventRequest
-from rtmonitor.storage.base import MetricSample, QueueLease, QueueStats, QueueStatus, StoreResult
+from rtmonitor.metrics import metric_values
+from rtmonitor.storage.base import (
+    MetricSample,
+    NodeSummary,
+    QueueLease,
+    QueueStats,
+    QueueStatus,
+    StoreResult,
+)
 from rtmonitor.storage.models import (
     Base,
     MetricSampleRecord,
@@ -226,22 +234,7 @@ class SqlAlchemyEventStore:
     async def write_metric_samples(self, payload: dict[str, object]) -> int:
         event = TelemetryEventRequest.model_validate(payload)
         metrics = event.metrics
-        values = {
-            "system.load.1m": metrics.load_1m,
-            "system.load.5m": metrics.load_5m,
-            "system.load.15m": metrics.load_15m,
-            "system.cpu.count": metrics.cpu_count,
-            "system.uptime.seconds": metrics.uptime_seconds,
-            "system.process.count": metrics.process_count,
-            "memory.total.bytes": metrics.memory.total_bytes,
-            "memory.available.bytes": metrics.memory.available_bytes,
-            "memory.used.percent": metrics.memory.used_percent,
-            "disk.total.bytes": metrics.disk.total_bytes,
-            "disk.free.bytes": metrics.disk.free_bytes,
-            "disk.used.percent": metrics.disk.used_percent,
-            "network.received.bytes": metrics.network.received_bytes,
-            "network.transmitted.bytes": metrics.network.transmitted_bytes,
-        }
+        values = metric_values(event)
         event_id = str(event.event_id)
         now = datetime.now(UTC)
         rows = [
@@ -250,7 +243,7 @@ class SqlAlchemyEventStore:
                 "node_id": event.node_id,
                 "metric_name": metric_name,
                 "observed_at": event.observed_at,
-                "value": float(value),
+                "value": value,
                 "labels": ({"path": metrics.disk.path} if metric_name.startswith("disk.") else {}),
                 "created_at": now,
             }
@@ -317,6 +310,28 @@ class SqlAlchemyEventStore:
                 labels=dict(record.labels),
             )
             for record in records
+        ]
+
+    async def list_nodes(self, *, limit: int) -> list[NodeSummary]:
+        statement = (
+            select(
+                TelemetryRecord.node_id,
+                func.max(TelemetryRecord.observed_at),
+                func.count(),
+            )
+            .group_by(TelemetryRecord.node_id)
+            .order_by(func.max(TelemetryRecord.observed_at).desc())
+            .limit(limit)
+        )
+        async with self._sessions() as session:
+            rows = (await session.execute(statement)).all()
+        return [
+            NodeSummary(
+                node_id=node_id,
+                last_seen=_utc(last_seen),
+                event_count=int(event_count),
+            )
+            for node_id, last_seen, event_count in rows
         ]
 
     async def prune_metric_samples(self, *, before: datetime, batch_size: int) -> int:
