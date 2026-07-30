@@ -82,3 +82,19 @@ class PipelineStatusResponse(StrictModel):
     processed: NonNegativeInt
     dead_letter: NonNegativeInt
     active_depth: NonNegativeInt
+
+
+class MetricPointResponse(StrictModel):
+    event_id: UUID
+    observed_at: datetime
+    value: float
+    labels: dict[str, str]
+
+
+class MetricHistoryResponse(StrictModel):
+    node_id: str
+    metric_name: str
+    start: datetime
+    end: datetime
+    points: list[MetricPointResponse]
+    next_cursor: str | None
