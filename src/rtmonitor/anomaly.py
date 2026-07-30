@@ -22,6 +22,17 @@ SCORABLE_METRICS = frozenset(
     }
 )
 
+# Minimum expected noise prevents nearly-flat baselines from amplifying harmless
+# changes into incidents. Values are expressed in each metric's native unit.
+MINIMUM_DISPERSION = {
+    "system.load.1m": 0.10,
+    "system.load.5m": 0.10,
+    "system.load.15m": 0.10,
+    "system.process.count": 5.0,
+    "memory.used.percent": 1.0,
+    "disk.used.percent": 0.5,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class AnomalyScore:
@@ -37,16 +48,19 @@ def robust_anomaly_score(
     history: list[float],
     *,
     minimum_samples: int = MIN_BASELINE_SAMPLES,
+    minimum_dispersion: float = 0.0,
 ) -> AnomalyScore | None:
     """Return a robust z-score when enough baseline data exists and value is anomalous."""
     if len(history) < minimum_samples:
         return None
     baseline = float(median(history))
-    dispersion = float(median(abs(point - baseline) for point in history))
-    if dispersion == 0:
-        score = 0.0 if value == baseline else CRITICAL_THRESHOLD
-    else:
-        score = abs(ROBUST_Z_SCALE * (value - baseline) / dispersion)
+    measured_dispersion = float(median(abs(point - baseline) for point in history))
+    dispersion = max(measured_dispersion, minimum_dispersion)
+    score = (
+        0.0
+        if dispersion == 0
+        else abs(ROBUST_Z_SCALE * (value - baseline) / dispersion)
+    )
     if score < ANOMALY_THRESHOLD:
         return None
     return AnomalyScore(

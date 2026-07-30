@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlalchemy.sql import Executable
 
-from rtmonitor.anomaly import SCORABLE_METRICS, robust_anomaly_score
+from rtmonitor.anomaly import MINIMUM_DISPERSION, SCORABLE_METRICS, robust_anomaly_score
 from rtmonitor.api.contracts import TelemetryEventRequest
 from rtmonitor.metrics import metric_values
 from rtmonitor.storage.base import (
@@ -291,7 +291,11 @@ class SqlAlchemyEventStore:
                 end=event.observed_at,
                 limit=120,
             )
-            result = robust_anomaly_score(values[metric_name], [sample.value for sample in history])
+            result = robust_anomaly_score(
+                values[metric_name],
+                [sample.value for sample in history],
+                minimum_dispersion=MINIMUM_DISPERSION[metric_name],
+            )
             if result is None:
                 continue
             findings.append(

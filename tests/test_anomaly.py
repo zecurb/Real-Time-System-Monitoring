@@ -22,12 +22,25 @@ class RobustAnomalyScoreTests(unittest.TestCase):
         self.assertEqual(result.severity, "critical")
         self.assertGreater(result.score, 7.0)
 
-    def test_constant_baseline_handles_change_without_dividing_by_zero(self) -> None:
-        result = robust_anomaly_score(21.0, [20.0] * 5)
+    def test_dispersion_floor_ignores_small_change_on_constant_baseline(self) -> None:
+        result = robust_anomaly_score(
+            21.0,
+            [20.0] * 5,
+            minimum_dispersion=1.0,
+        )
+
+        self.assertIsNone(result)
+
+    def test_dispersion_floor_still_detects_large_change(self) -> None:
+        result = robust_anomaly_score(
+            99.0,
+            [24.0] * 5,
+            minimum_dispersion=1.0,
+        )
 
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result.score, 7.0)
+        self.assertEqual(result.dispersion, 1.0)
         self.assertEqual(result.severity, "critical")
 
 

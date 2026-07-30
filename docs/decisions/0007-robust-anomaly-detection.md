@@ -13,6 +13,8 @@ five prior samples. A robust absolute z-score of 3.5 or greater is a warning;
 
 Each finding stores the measured value, baseline, dispersion, score, severity,
 and baseline sample count. Event and metric form an idempotency key.
+Metric-specific minimum dispersion floors prevent normal low-variance noise
+from being amplified into false incidents.
 
 ## Why
 
