@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from rtmonitor.api.contracts import TelemetryEventRequest
-from rtmonitor.storage.base import QueueStats, StoreResult
+from rtmonitor.storage.base import MetricSample, QueueStats, StoreResult
 
 
 class InMemoryEventStore:
@@ -26,6 +28,18 @@ class InMemoryEventStore:
 
     async def queue_stats(self) -> QueueStats:
         return QueueStats(pending=len(self._event_ids))
+
+    async def query_metric_samples(
+        self,
+        *,
+        node_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+        cursor: tuple[datetime, str] | None = None,
+    ) -> list[MetricSample]:
+        return []
 
     async def ping(self) -> bool:
         return self.available
