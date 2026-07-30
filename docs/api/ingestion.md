@@ -17,6 +17,7 @@ is available at `http://127.0.0.1:8000/docs`.
 | --- | --- | --- |
 | `GET` | `/health/live` | Confirms the process can serve requests |
 | `GET` | `/health/ready` | Confirms the service can accept another event |
+| `GET` | `/v1/pipeline/status` | Reports queue state and active depth |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
 Accepted and duplicate events return HTTP `202`. Invalid contracts return `422`. Requests
@@ -44,17 +45,18 @@ startup.
 
 ## Durability and idempotency
 
-The API commits an event before returning `202`. `event_id` is the primary key,
-so retrying an already committed event returns `status: duplicate` without
-creating another record. Database schema changes are applied with:
+The API commits an event and its queue entry in one transaction before
+returning `202`. `event_id` is the primary key, so retrying an already
+committed event returns `status: duplicate` without creating another record.
+The response includes `queue_depth`. Database schema changes are applied with:
 
 ```bash
 alembic upgrade head
 ```
 
-SQLite is supported for local development and tests. PostgreSQL is the
-production target. Durable storage does not yet provide the high-throughput
-stream buffering planned for the next distributed pipeline phase.
+SQLite is supported for local development and single-worker tests. PostgreSQL
+is the multi-worker production target. See the
+[worker guide](../pipeline/worker.md) for lease and retry configuration.
 
 The application checks `Content-Length` to reject declared oversized bodies.
 A production ingress proxy must also enforce request-size limits, including
@@ -62,4 +64,3 @@ chunked requests, until a streaming body-limit middleware is implemented.
 
 See the [storage guide](../storage/postgresql.md) for PostgreSQL startup and
 migration commands.
-

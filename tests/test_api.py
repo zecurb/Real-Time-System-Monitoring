@@ -79,8 +79,27 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "accepted")
         self.assertEqual(response.json()["request_id"], "test-request-123")
         self.assertEqual(response.json()["stored_events"], 1)
+        self.assertEqual(response.json()["queue_depth"], 1)
         self.assertEqual(response.headers["X-Request-ID"], "test-request-123")
         self.assertIn("X-Process-Time-Ms", response.headers)
+
+    def test_reports_pipeline_status(self) -> None:
+        self.client.post("/v1/telemetry", json=valid_event())
+
+        response = self.client.get("/v1/pipeline/status")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "pending": 1,
+                "processing": 0,
+                "retry": 0,
+                "processed": 0,
+                "dead_letter": 0,
+                "active_depth": 1,
+            },
+        )
 
     def test_duplicate_event_is_idempotent(self) -> None:
         first = self.client.post("/v1/telemetry", json=valid_event())
@@ -90,6 +109,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(duplicate.status_code, 202)
         self.assertEqual(duplicate.json()["status"], "duplicate")
         self.assertEqual(duplicate.json()["stored_events"], 1)
+        self.assertEqual(duplicate.json()["queue_depth"], 1)
 
     def test_rejects_unknown_schema_version(self) -> None:
         event = valid_event()
@@ -121,4 +141,3 @@ class ApiTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

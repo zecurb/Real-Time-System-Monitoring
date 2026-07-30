@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from rtmonitor.api.contracts import TelemetryEventRequest
-from rtmonitor.storage.base import StoreResult
+from rtmonitor.storage.base import QueueStats, StoreResult
 
 
 class InMemoryEventStore:
@@ -21,9 +21,14 @@ class InMemoryEventStore:
     async def count(self) -> int:
         return len(self._event_ids)
 
+    async def queue_depth(self) -> int:
+        return len(self._event_ids)
+
+    async def queue_stats(self) -> QueueStats:
+        return QueueStats(pending=len(self._event_ids))
+
     async def ping(self) -> bool:
         return self.available
 
     async def close(self) -> None:
         return None
-

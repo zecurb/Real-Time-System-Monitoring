@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 3 — durable telemetry storage.
+> Status: Phase 4 — durable distributed processing foundation.
 
 ## Current capabilities
 
@@ -23,6 +23,10 @@ actionable evidence to engineers during incidents.
   and storage-aware readiness.
 - Persists telemetry through SQLAlchemy with idempotent event IDs, Alembic
   migrations, PostgreSQL production support, and SQLite development support.
+- Atomically enqueues accepted telemetry for asynchronous processing.
+- Runs independent CPU-only workers with bounded batches, expiring leases,
+  competing-worker isolation, exponential retry, and dead-letter handling.
+- Reports pipeline depth and per-state totals for incident visibility.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -63,6 +67,19 @@ rtmonitor-api
 Then open `http://127.0.0.1:8000/docs`. See the
 [ingestion API guide](docs/api/ingestion.md) for contracts and limitations.
 
+Start a worker in another development shell:
+
+```bash
+rtmonitor-worker
+```
+
+For a smoke test that processes one available batch and exits:
+
+```bash
+rtmonitor-worker --once
+curl http://127.0.0.1:8000/v1/pipeline/status
+```
+
 Run continuously at a five-second interval:
 
 ```bash
@@ -95,10 +112,11 @@ nix develop
 1. Linux telemetry collector
 2. Versioned event contracts and ingestion API
 3. Durable event storage and idempotent ingestion
-4. Time-series and log storage
-5. Incident-focused React dashboard
-6. Anomaly detection and resource forecasting
-7. Multi-node deployment, load testing, and failure injection
+4. Durable distributed processing foundation
+5. Time-series and log storage
+6. Incident-focused React dashboard
+7. Anomaly detection and resource forecasting
+8. Multi-node deployment, load testing, and failure injection
 
 ## Production-readiness policy
 
