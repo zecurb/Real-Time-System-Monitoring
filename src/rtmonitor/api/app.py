@@ -20,13 +20,18 @@ from rtmonitor.api.config import ApiSettings
 from rtmonitor.api.contracts import (
     AcceptedResponse,
     HealthResponse,
+    MetricCatalogResponse,
+    MetricDefinitionResponse,
     MetricHistoryResponse,
     MetricPointResponse,
+    NodeListResponse,
+    NodeSummaryResponse,
     PipelineStatusResponse,
     TelemetryEventRequest,
 )
 from rtmonitor.api.logging import configure_logging, log_event
 from rtmonitor.api.pagination import decode_metric_cursor, encode_metric_cursor
+from rtmonitor.metrics import METRIC_DEFINITIONS
 from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
 from rtmonitor.storage.sqlalchemy import StorageUnavailableError
 
@@ -57,8 +62,8 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.5.0",
-        description="Ingests telemetry and serves normalized historical metrics.",
+        version="0.6.0",
+        description="Ingests telemetry and serves an incident-focused monitoring console.",
         lifespan=lifespan,
     )
 
@@ -159,6 +164,36 @@ def create_app(
             processed=stats.processed,
             dead_letter=stats.dead_letter,
             active_depth=stats.pending + stats.processing + stats.retry,
+        )
+
+    @app.get("/v1/nodes", response_model=NodeListResponse)
+    async def nodes(
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> NodeListResponse:
+        discovered = await resolved_store.list_nodes(limit=limit)
+        return NodeListResponse(
+            nodes=[
+                NodeSummaryResponse(
+                    node_id=node.node_id,
+                    last_seen=node.last_seen,
+                    event_count=node.event_count,
+                )
+                for node in discovered
+            ]
+        )
+
+    @app.get("/v1/metrics", response_model=MetricCatalogResponse)
+    async def metric_catalog() -> MetricCatalogResponse:
+        return MetricCatalogResponse(
+            metrics=[
+                MetricDefinitionResponse(
+                    name=definition.name,
+                    display_name=definition.display_name,
+                    unit=definition.unit,
+                    category=definition.category,
+                )
+                for definition in METRIC_DEFINITIONS
+            ]
         )
 
     @app.get(

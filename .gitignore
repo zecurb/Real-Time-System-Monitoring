@@ -5,6 +5,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+node_modules/
 dist/
 build/
 *.egg-info/
@@ -16,4 +17,6 @@ rtmonitor.db-shm
 rtmonitor.db-wal
 coverage.xml
 htmlcov/
+coverage/
+*.tsbuildinfo
 .DS_Store

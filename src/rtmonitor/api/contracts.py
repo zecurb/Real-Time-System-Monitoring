@@ -98,3 +98,24 @@ class MetricHistoryResponse(StrictModel):
     end: datetime
     points: list[MetricPointResponse]
     next_cursor: str | None
+
+
+class NodeSummaryResponse(StrictModel):
+    node_id: str
+    last_seen: datetime
+    event_count: NonNegativeInt
+
+
+class NodeListResponse(StrictModel):
+    nodes: list[NodeSummaryResponse]
+
+
+class MetricDefinitionResponse(StrictModel):
+    name: str
+    display_name: str
+    unit: str
+    category: str
+
+
+class MetricCatalogResponse(StrictModel):
+    metrics: list[MetricDefinitionResponse]

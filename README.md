@@ -8,7 +8,7 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 5 — normalized time-series storage and historical queries.
+> Status: Phase 6 — incident-focused React dashboard.
 
 ## Current capabilities
 
@@ -31,6 +31,9 @@ actionable evidence to engineers during incidents.
   conflict-safe, retry-idempotent bulk writes.
 - Serves bounded historical queries with stable cursor pagination.
 - Prunes expired metric samples in bounded retention batches.
+- Provides a responsive React and TypeScript incident console with node
+  discovery, pipeline health, historical charts, resilient auto-refresh, and
+  explicit degraded-data states.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -99,6 +102,17 @@ Prune samples older than 30 days in bounded batches:
 rtmonitor-retention --days 30
 ```
 
+Start the dashboard development server in a separate shell:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The Vite development proxy forwards API calls to
+`http://127.0.0.1:8000`.
+
 Run continuously at a five-second interval:
 
 ```bash
@@ -133,7 +147,7 @@ nix develop
 3. Durable event storage and idempotent ingestion
 4. Durable distributed processing foundation
 5. Normalized time-series storage and historical query APIs
-6. Incident-focused React dashboard
+6. Incident-focused React and TypeScript dashboard
 7. Anomaly detection and resource forecasting
 8. Multi-node deployment, load testing, and failure injection
 

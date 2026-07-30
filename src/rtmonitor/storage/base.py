@@ -49,6 +49,13 @@ class MetricSample:
     labels: dict[str, str]
 
 
+@dataclass(frozen=True, slots=True)
+class NodeSummary:
+    node_id: str
+    last_seen: datetime
+    event_count: int
+
+
 class EventStore(Protocol):
     async def store(self, event: TelemetryEventRequest) -> StoreResult: ...
 
@@ -68,6 +75,8 @@ class EventStore(Protocol):
         limit: int,
         cursor: tuple[datetime, str] | None = None,
     ) -> list[MetricSample]: ...
+
+    async def list_nodes(self, *, limit: int) -> list[NodeSummary]: ...
 
     async def ping(self) -> bool: ...
 

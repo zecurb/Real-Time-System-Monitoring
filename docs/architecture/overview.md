@@ -49,3 +49,16 @@ future time-window features without scanning JSON event payloads.
 Raw events remain the source of truth. Normalized samples are a reproducible
 projection, which allows migration `0003` to requeue previously processed
 events for backfill.
+
+## Incident console boundary
+
+The dashboard is a React and TypeScript single-page application. It discovers
+nodes and metric metadata from the API, queries bounded historical windows,
+and refreshes operational state every five seconds. Failed refreshes preserve
+last-known data and display an explicit degraded-state banner.
+
+The frontend uses no third-party charting library. Its responsive SVG chart
+keeps the production bundle small and provides an accessible image label and
+point-level tooltips. Development uses Vite's same-origin proxy. Production
+deployments serve the compiled static assets behind the same reverse proxy as
+the API.

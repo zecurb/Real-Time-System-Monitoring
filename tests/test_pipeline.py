@@ -68,6 +68,10 @@ class PipelineWorkerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(samples), 1)
             self.assertEqual(samples[0].value, 22.53)
             self.assertEqual(samples[0].event_id, str(event.event_id))
+            nodes = await store.list_nodes(limit=100)
+            self.assertEqual(len(nodes), 1)
+            self.assertEqual(nodes[0].node_id, event.node_id)
+            self.assertEqual(nodes[0].event_count, 1)
             await store.close()
 
     async def test_metric_query_uses_stable_cursor_pagination(self) -> None:

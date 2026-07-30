@@ -3,6 +3,7 @@
 from rtmonitor.storage.base import (
     EventStore,
     MetricSample,
+    NodeSummary,
     QueueLease,
     QueueStats,
     QueueStatus,
@@ -15,6 +16,7 @@ __all__ = [
     "EventStore",
     "InMemoryEventStore",
     "MetricSample",
+    "NodeSummary",
     "QueueLease",
     "QueueStats",
     "QueueStatus",
