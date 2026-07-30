@@ -101,6 +101,32 @@ class ApiTests(unittest.TestCase):
             },
         )
 
+    def test_returns_bounded_empty_metric_history(self) -> None:
+        response = self.client.get(
+            "/v1/metrics/test-node-001",
+            params={
+                "metric": "memory.used.percent",
+                "start": "2026-07-01T00:00:00+00:00",
+                "end": "2026-07-02T00:00:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["points"], [])
+        self.assertIsNone(response.json()["next_cursor"])
+
+    def test_rejects_oversized_metric_query_window(self) -> None:
+        response = self.client.get(
+            "/v1/metrics/test-node-001",
+            params={
+                "metric": "memory.used.percent",
+                "start": "2026-01-01T00:00:00+00:00",
+                "end": "2026-03-01T00:00:00+00:00",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_duplicate_event_is_idempotent(self) -> None:
         first = self.client.post("/v1/telemetry", json=valid_event())
         duplicate = self.client.post("/v1/telemetry", json=valid_event())
