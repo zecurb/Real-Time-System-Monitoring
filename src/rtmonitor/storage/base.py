@@ -70,6 +70,26 @@ class Anomaly:
     sample_count: int
 
 
+@dataclass(frozen=True, slots=True)
+class Forecast:
+    event_id: str
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    current_value: float
+    threshold: float
+    slope_per_hour: float
+    hours_to_threshold: float
+    predicted_at: datetime
+    r_squared: float
+    confidence: Literal["medium", "high"]
+    risk: Literal["watch", "warning", "critical"]
+    sample_count: int
+    backtest_error: float | None
+    provider: Literal["cpu", "gpu"]
+    fallback_reason: str | None
+
+
 class EventStore(Protocol):
     async def store(self, event: TelemetryEventRequest) -> StoreResult: ...
 
@@ -90,6 +110,16 @@ class EventStore(Protocol):
         cursor: tuple[datetime, str] | None = None,
     ) -> list[MetricSample]: ...
 
+    async def query_recent_metric_samples(
+        self,
+        *,
+        node_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[MetricSample]: ...
+
     async def list_nodes(self, *, limit: int) -> list[NodeSummary]: ...
 
     async def list_anomalies(
@@ -100,6 +130,10 @@ class EventStore(Protocol):
         end: datetime,
         limit: int,
     ) -> list[Anomaly]: ...
+
+    async def list_forecasts(
+        self, *, node_id: str | None, limit: int
+    ) -> list[Forecast]: ...
 
     async def ping(self) -> bool: ...
 

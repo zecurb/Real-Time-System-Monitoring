@@ -21,6 +21,9 @@ is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/v1/nodes` | Discovers monitored nodes by most recent event |
 | `GET` | `/v1/metrics` | Lists normalized metrics and presentation metadata |
 | `GET` | `/v1/metrics/{node_id}` | Returns one historical metric series |
+| `GET` | `/v1/anomalies` | Returns bounded explainable anomaly findings |
+| `GET` | `/v1/forecasts` | Returns resource threshold forecasts |
+| `GET` | `/v1/runtime` | Reports prediction provider and CPU fallback reason |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
 Accepted and duplicate events return HTTP `202`. Invalid contracts return `422`. Requests
@@ -42,6 +45,7 @@ underscores, or hyphens. Invalid values are replaced with a generated UUID.
 | --- | ---: | --- |
 | `RTMONITOR_DATABASE_URL` | `sqlite+aiosqlite:///./rtmonitor.db` | SQLAlchemy database URL |
 | `RTMONITOR_MAX_REQUEST_BYTES` | `65536` | Maximum declared request size |
+| `RTMONITOR_EXECUTION_PROVIDER` | `auto` | Prediction provider: `auto`, `cpu`, or `gpu` |
 
 The request limit must be a positive integer. Invalid configuration prevents
 startup.
@@ -85,3 +89,17 @@ The normalized metric names are:
 - `memory.total.bytes`, `memory.available.bytes`, `memory.used.percent`
 - `disk.total.bytes`, `disk.free.bytes`, `disk.used.percent`
 - `network.received.bytes`, `network.transmitted.bytes`
+
+## Forecast responses
+
+`/v1/forecasts` may be filtered by `node_id` and bounded with `limit`. A
+forecast is emitted only for a reliable upward memory or disk trend that
+crosses its configured threshold within seven days. Responses include the
+current value, threshold, hourly slope, predicted crossing time, R²,
+confidence, risk, sample count, one-step backtest error, actual provider, and
+any CPU fallback reason.
+
+`/v1/runtime` resolves provider availability on each request. GPU mode requires
+an operator-installed CuPy package compatible with the host CUDA runtime. A
+missing package, missing device, or runtime failure safely selects CPU and
+reports why.

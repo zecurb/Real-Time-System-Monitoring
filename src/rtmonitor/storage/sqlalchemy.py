@@ -14,9 +14,12 @@ from sqlalchemy.sql import Executable
 
 from rtmonitor.anomaly import MINIMUM_DISPERSION, SCORABLE_METRICS, robust_anomaly_score
 from rtmonitor.api.contracts import TelemetryEventRequest
+from rtmonitor.execution import resolve_execution_provider
+from rtmonitor.forecast import FORECAST_THRESHOLDS, ForecastPoint, forecast_threshold
 from rtmonitor.metrics import metric_values
 from rtmonitor.storage.base import (
     Anomaly,
+    Forecast,
     MetricSample,
     NodeSummary,
     QueueLease,
@@ -27,10 +30,13 @@ from rtmonitor.storage.base import (
 from rtmonitor.storage.models import (
     AnomalyRecord,
     Base,
+    ForecastRecord,
     MetricSampleRecord,
     PipelineQueueRecord,
     TelemetryRecord,
 )
+
+FORECAST_HISTORY_LIMIT = 2048
 
 
 class StorageUnavailableError(RuntimeError):
@@ -282,21 +288,84 @@ class SqlAlchemyEventStore:
         event = TelemetryEventRequest.model_validate(payload)
         await self.write_metric_samples(payload)
         values = metric_values(event)
+        provider = resolve_execution_provider()
+        forecasts: list[dict[str, object]] = []
+        for metric_name, threshold in FORECAST_THRESHOLDS.items():
+            history = await self.query_recent_metric_samples(
+                node_id=event.node_id,
+                metric_name=metric_name,
+                start=event.observed_at - timedelta(days=7),
+                end=event.observed_at + timedelta(microseconds=1),
+                limit=FORECAST_HISTORY_LIMIT,
+            )
+            forecast_result = forecast_threshold(
+                [
+                    ForecastPoint(sample.observed_at, sample.value)
+                    for sample in history
+                ],
+                threshold=threshold,
+                provider=provider,
+            )
+            if forecast_result is not None:
+                forecasts.append(
+                    {
+                        "event_id": str(event.event_id),
+                        "node_id": event.node_id,
+                        "metric_name": metric_name,
+                        "observed_at": event.observed_at,
+                        "current_value": forecast_result.current_value,
+                        "threshold": forecast_result.threshold,
+                        "slope_per_hour": forecast_result.slope_per_hour,
+                        "hours_to_threshold": forecast_result.hours_to_threshold,
+                        "predicted_at": forecast_result.predicted_at,
+                        "r_squared": forecast_result.r_squared,
+                        "confidence": forecast_result.confidence,
+                        "risk": forecast_result.risk,
+                        "sample_count": forecast_result.sample_count,
+                        "backtest_error": forecast_result.backtest_error,
+                        "provider": forecast_result.provider,
+                        "fallback_reason": forecast_result.fallback_reason,
+                        "created_at": datetime.now(UTC),
+                    }
+                )
+        if forecasts:
+            forecast_insert: Executable
+            if self._engine.dialect.name == "postgresql":
+                forecast_insert = (
+                    postgresql_insert(ForecastRecord)
+                    .values(forecasts)
+                    .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+                )
+            elif self._engine.dialect.name == "sqlite":
+                forecast_insert = (
+                    sqlite_insert(ForecastRecord)
+                    .values(forecasts)
+                    .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+                )
+            else:
+                raise StorageUnavailableError("unsupported forecast storage dialect")
+            async with self._sessions() as session:
+                try:
+                    await session.execute(forecast_insert)
+                    await session.commit()
+                except SQLAlchemyError as exc:
+                    await session.rollback()
+                    raise StorageUnavailableError("forecast write failed") from exc
         findings: list[dict[str, object]] = []
         for metric_name in SCORABLE_METRICS:
-            history = await self.query_metric_samples(
+            history = await self.query_recent_metric_samples(
                 node_id=event.node_id,
                 metric_name=metric_name,
                 start=event.observed_at - timedelta(days=7),
                 end=event.observed_at,
                 limit=120,
             )
-            result = robust_anomaly_score(
+            anomaly_result = robust_anomaly_score(
                 values[metric_name],
                 [sample.value for sample in history],
                 minimum_dispersion=MINIMUM_DISPERSION[metric_name],
             )
-            if result is None:
+            if anomaly_result is None:
                 continue
             findings.append(
                 {
@@ -305,11 +374,11 @@ class SqlAlchemyEventStore:
                     "metric_name": metric_name,
                     "observed_at": event.observed_at,
                     "value": values[metric_name],
-                    "baseline": result.baseline,
-                    "dispersion": result.dispersion,
-                    "score": result.score,
-                    "severity": result.severity,
-                    "sample_count": result.sample_count,
+                    "baseline": anomaly_result.baseline,
+                    "dispersion": anomaly_result.dispersion,
+                    "score": anomaly_result.score,
+                    "severity": anomaly_result.severity,
+                    "sample_count": anomaly_result.sample_count,
                     "created_at": datetime.now(UTC),
                 }
             )
@@ -377,6 +446,45 @@ class SqlAlchemyEventStore:
             for record in records
         ]
 
+    async def query_recent_metric_samples(
+        self,
+        *,
+        node_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+    ) -> list[MetricSample]:
+        """Return the newest bounded window in chronological order."""
+        statement = (
+            select(MetricSampleRecord)
+            .where(
+                MetricSampleRecord.node_id == node_id,
+                MetricSampleRecord.metric_name == metric_name,
+                MetricSampleRecord.observed_at >= start,
+                MetricSampleRecord.observed_at < end,
+            )
+            .order_by(
+                MetricSampleRecord.observed_at.desc(),
+                MetricSampleRecord.event_id.desc(),
+            )
+            .limit(limit)
+        )
+        async with self._sessions() as session:
+            records = list((await session.scalars(statement)).all())
+        records.reverse()
+        return [
+            MetricSample(
+                event_id=record.event_id,
+                node_id=record.node_id,
+                metric_name=record.metric_name,
+                observed_at=_utc(record.observed_at),
+                value=record.value,
+                labels=dict(record.labels),
+            )
+            for record in records
+        ]
+
     async def list_nodes(self, *, limit: int) -> list[NodeSummary]:
         statement = (
             select(
@@ -432,6 +540,57 @@ class SqlAlchemyEventStore:
                 score=record.score,
                 severity=cast(Literal["warning", "critical"], record.severity),
                 sample_count=record.sample_count,
+            )
+            for record in records
+        ]
+
+    async def list_forecasts(
+        self, *, node_id: str | None, limit: int
+    ) -> list[Forecast]:
+        latest = select(
+            ForecastRecord.node_id.label("node_id"),
+            ForecastRecord.metric_name.label("metric_name"),
+            func.max(ForecastRecord.observed_at).label("observed_at"),
+        )
+        if node_id is not None:
+            latest = latest.where(ForecastRecord.node_id == node_id)
+        latest_subquery = latest.group_by(
+            ForecastRecord.node_id,
+            ForecastRecord.metric_name,
+        ).subquery()
+        statement = (
+            select(ForecastRecord)
+            .join(
+                latest_subquery,
+                and_(
+                    ForecastRecord.node_id == latest_subquery.c.node_id,
+                    ForecastRecord.metric_name == latest_subquery.c.metric_name,
+                    ForecastRecord.observed_at == latest_subquery.c.observed_at,
+                ),
+            )
+            .order_by(ForecastRecord.hours_to_threshold, ForecastRecord.metric_name)
+            .limit(limit)
+        )
+        async with self._sessions() as session:
+            records = (await session.scalars(statement)).all()
+        return [
+            Forecast(
+                event_id=record.event_id,
+                node_id=record.node_id,
+                metric_name=record.metric_name,
+                observed_at=_utc(record.observed_at),
+                current_value=record.current_value,
+                threshold=record.threshold,
+                slope_per_hour=record.slope_per_hour,
+                hours_to_threshold=record.hours_to_threshold,
+                predicted_at=_utc(record.predicted_at),
+                r_squared=record.r_squared,
+                confidence=cast(Literal["medium", "high"], record.confidence),
+                risk=cast(Literal["watch", "warning", "critical"], record.risk),
+                sample_count=record.sample_count,
+                backtest_error=record.backtest_error,
+                provider=cast(Literal["cpu", "gpu"], record.provider),
+                fallback_reason=record.fallback_reason,
             )
             for record in records
         ]

@@ -8,13 +8,14 @@ events, and privacy-preserving behavior signals. It will correlate those
 signals, detect anomalies, forecast resource exhaustion, and present
 actionable evidence to engineers during incidents.
 
-> Status: Phase 7 — explainable CPU-based anomaly detection.
+> Status: Phase 8 — hardware-aware resource forecasting.
 
 ## Current capabilities
 
 - Collects Linux CPU load, memory, disk, network, uptime, and process counts.
 - Emits one versioned JSON event per collection interval.
-- Uses only the Python standard library at runtime.
+- Keeps collection lightweight while the API, storage, and prediction services
+  use pinned Python dependencies.
 - Runs on headless, CPU-only Linux systems; no GPU is required.
 - Handles shutdown signals and collection errors without producing malformed
   telemetry.
@@ -36,6 +37,8 @@ actionable evidence to engineers during incidents.
   explicit degraded-data states.
 - Detects unusual load, process, memory, and disk behavior with robust
   per-node median/MAD baselines and durable, explainable severity findings.
+- Forecasts reliable memory and disk threshold crossings with confidence,
+  risk, backtesting, and observable CPU/GPU provider selection.
 - Includes automated tests, type checking, linting, and CI configuration.
 
 ## Planned architecture
@@ -105,6 +108,20 @@ curl --get http://127.0.0.1:8000/v1/anomalies \
   --data-urlencode "start=2026-07-30T00:00:00+00:00" \
   --data-urlencode "end=2026-07-31T00:00:00+00:00" | jq .
 ```
+
+Inspect the active prediction provider and current resource forecasts:
+
+```bash
+curl http://127.0.0.1:8000/v1/runtime | jq .
+curl http://127.0.0.1:8000/v1/forecasts | jq .
+```
+
+CPU execution is the reliable default on every host. Set
+`RTMONITOR_EXECUTION_PROVIDER=auto|cpu|gpu` before starting the API and worker.
+`auto` uses a compatible CUDA device through an operator-installed CuPy build
+when available and otherwise reports the reason for its CPU fallback. GPU
+packages are intentionally optional because the correct CuPy build depends on
+the host's CUDA runtime.
 
 Prune samples older than 30 days in bounded batches:
 

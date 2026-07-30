@@ -4,11 +4,13 @@ import { api } from "./api";
 import { formatValue, MetricChart } from "./components/MetricChart";
 import type {
   Anomaly,
+  Forecast,
   Health,
   MetricDefinition,
   MetricHistory,
   NodeSummary,
-  PipelineStatus
+  PipelineStatus,
+  Runtime
 } from "./types";
 import "./styles.css";
 
@@ -39,6 +41,8 @@ export default function App() {
   const [windowHours, setWindowHours] = useState(1);
   const [history, setHistory] = useState<MetricHistory | null>(null);
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
+  const [forecasts, setForecasts] = useState<Forecast[]>([]);
+  const [runtime, setRuntime] = useState<Runtime | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -48,19 +52,31 @@ export default function App() {
       try {
         const anomalyEnd = new Date();
         const anomalyStart = new Date(anomalyEnd.getTime() - 24 * 60 * 60 * 1000);
-        const [nextHealth, nextPipeline, nextNodes, nextMetrics, nextAnomalies] =
+        const [
+          nextHealth,
+          nextPipeline,
+          nextNodes,
+          nextMetrics,
+          nextAnomalies,
+          nextForecasts,
+          nextRuntime
+        ] =
           await Promise.all([
           api.health(controller.signal),
           api.pipeline(controller.signal),
           api.nodes(controller.signal),
           api.metrics(controller.signal),
-          api.anomalies(anomalyStart, anomalyEnd, controller.signal)
+          api.anomalies(anomalyStart, anomalyEnd, controller.signal),
+          api.forecasts(controller.signal),
+          api.runtime(controller.signal)
         ]);
         setHealth(nextHealth);
         setPipeline(nextPipeline);
         setNodes(nextNodes);
         setMetrics(nextMetrics);
         setAnomalies(nextAnomalies);
+        setForecasts(nextForecasts);
+        setRuntime(nextRuntime);
         setSelectedNode((current) => current || nextNodes[0]?.node_id || "");
         setError(null);
         setLastUpdated(new Date());
@@ -155,6 +171,11 @@ export default function App() {
           <span>Anomalies (24h)</span>
           <strong>{anomalies.length.toLocaleString()}</strong>
           <small>Explainable statistical findings</small>
+        </article>
+        <article className={`stat-card ${forecasts.length > 0 ? "warning" : ""}`}>
+          <span>Forecast risks</span>
+          <strong>{forecasts.length.toLocaleString()}</strong>
+          <small>Provider: {runtime?.active.toUpperCase() ?? "checking"}</small>
         </article>
       </section>
 
@@ -285,12 +306,48 @@ export default function App() {
               ))}
             </div>
           </div>
+          <div className="anomaly-section">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Prediction</p>
+                <h2>Resource forecasts</h2>
+              </div>
+              <span className="count-badge">{forecasts.length}</span>
+            </div>
+            <div className="anomaly-list">
+              {forecasts.length === 0 && (
+                <p className="empty-copy">No reliable threshold crossings predicted.</p>
+              )}
+              {forecasts.slice(0, 8).map((forecast) => (
+                <article
+                  className={`anomaly-row ${forecast.risk}`}
+                  key={`${forecast.event_id}-${forecast.metric_name}`}
+                >
+                  <div>
+                    <strong>{forecast.metric_name}</strong>
+                    <small>{forecast.node_id}</small>
+                  </div>
+                  <span>{forecast.risk}</span>
+                  <small>
+                    Threshold in {forecast.hours_to_threshold.toFixed(1)}h ·{" "}
+                    {forecast.confidence} confidence · {forecast.provider.toUpperCase()}
+                    {forecast.backtest_error !== null
+                      ? ` · backtest ±${forecast.backtest_error.toFixed(2)}`
+                      : ""}
+                  </small>
+                  {forecast.fallback_reason && (
+                    <small title={forecast.fallback_reason}>CPU fallback active</small>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
         </aside>
       </section>
 
       <footer>
-        <span>RT Monitor v0.7</span>
-        <span>CPU-first · Explainable anomalies · Historical telemetry</span>
+        <span>RT Monitor v0.8</span>
+        <span>CPU/GPU aware · Failure forecasting · Explainable anomalies</span>
       </footer>
     </main>
   );

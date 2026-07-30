@@ -74,6 +74,37 @@ describe("Incident Console", () => {
             ]
           });
         }
+        if (path === "/v1/forecasts") {
+          return response({
+            forecasts: [
+              {
+                event_id: "24d6a69e-e40a-42a1-9b45-549d8a949d59",
+                node_id: "node-001",
+                metric_name: "memory.used.percent",
+                current_value: 85,
+                threshold: 90,
+                slope_per_hour: 5,
+                hours_to_threshold: 1,
+                predicted_at: "2026-07-30T07:30:00Z",
+                r_squared: 100,
+                confidence: "high",
+                risk: "critical",
+                sample_count: 7,
+                backtest_error: 0,
+                provider: "cpu",
+                fallback_reason: "CuPy is not installed"
+              }
+            ]
+          });
+        }
+        if (path === "/v1/runtime") {
+          return response({
+            requested: "auto",
+            active: "cpu",
+            accelerator: null,
+            fallback_reason: "GPU unavailable"
+          });
+        }
         if (path.startsWith("/v1/metrics/node-001?")) {
           return response({
             node_id: "node-001",
@@ -98,13 +129,17 @@ describe("Incident Console", () => {
     render(<App />);
 
     expect(await screen.findByText("Systems ready")).toBeInTheDocument();
-    expect(screen.getAllByText("node-001")).toHaveLength(3);
+    expect(screen.getAllByText("node-001")).toHaveLength(4);
     await waitFor(() =>
       expect(screen.getAllByText("26.9%").length).toBeGreaterThan(0)
     );
     expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.getByText("Recent anomalies")).toBeInTheDocument();
     expect(screen.getByText("Score 8.1 · baseline 26.9")).toBeInTheDocument();
+    expect(
+      screen.getByText("Threshold in 1.0h · high confidence · CPU · backtest ±0.00")
+    ).toBeInTheDocument();
+    expect(screen.getByText("CPU fallback active")).toBeInTheDocument();
   });
 
   it("shows an explicit degraded state when refresh fails", async () => {
