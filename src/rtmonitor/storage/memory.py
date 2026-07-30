@@ -8,6 +8,9 @@ from rtmonitor.api.contracts import TelemetryEventRequest
 from rtmonitor.storage.base import (
     Anomaly,
     Forecast,
+    Incident,
+    IncidentNotFoundError,
+    IncidentTimelineEvent,
     MetricSample,
     NodeSummary,
     QueueStats,
@@ -74,6 +77,34 @@ class InMemoryEventStore:
 
     async def list_forecasts(self, *, node_id: str | None, limit: int) -> list[Forecast]:
         return []
+
+    async def list_incidents(
+        self,
+        *,
+        status: str | None,
+        node_id: str | None,
+        limit: int,
+    ) -> list[Incident]:
+        return []
+
+    async def incident_timeline(
+        self,
+        *,
+        incident_id: str,
+        limit: int,
+    ) -> list[IncidentTimelineEvent]:
+        raise IncidentNotFoundError(incident_id)
+
+    async def transition_incident(
+        self,
+        *,
+        incident_id: str,
+        action: str,
+        actor: str,
+        note: str | None,
+        expected_revision: int,
+    ) -> Incident:
+        raise IncidentNotFoundError(incident_id)
 
     async def ping(self) -> bool:
         return self.available

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -97,6 +97,50 @@ describe("Incident Console", () => {
             ]
           });
         }
+        if (path === "/v1/incidents") {
+          return response({
+            incidents: [
+              {
+                incident_id: "34d6a69e-e40a-42a1-9b45-549d8a949d59",
+                node_id: "node-001",
+                metric_name: "memory.used.percent",
+                status: "open",
+                severity: "critical",
+                title: "Memory exhaustion risk",
+                summary: "Memory is forecast to cross its threshold",
+                occurrence_count: 3,
+                first_seen: new Date().toISOString(),
+                last_seen: new Date().toISOString(),
+                owner: null,
+                acknowledged_at: null,
+                resolved_at: null,
+                resolution_note: null,
+                revision: 4,
+                updated_at: new Date().toISOString()
+              }
+            ]
+          });
+        }
+        if (path === "/v1/incidents/34d6a69e-e40a-42a1-9b45-549d8a949d59/acknowledge") {
+          return response({
+            incident_id: "34d6a69e-e40a-42a1-9b45-549d8a949d59",
+            node_id: "node-001",
+            metric_name: "memory.used.percent",
+            status: "acknowledged",
+            severity: "critical",
+            title: "Memory exhaustion risk",
+            summary: "Memory is forecast to cross its threshold",
+            occurrence_count: 3,
+            first_seen: new Date().toISOString(),
+            last_seen: new Date().toISOString(),
+            owner: "on-call",
+            acknowledged_at: new Date().toISOString(),
+            resolved_at: null,
+            resolution_note: null,
+            revision: 5,
+            updated_at: new Date().toISOString()
+          });
+        }
         if (path === "/v1/runtime") {
           return response({
             requested: "auto",
@@ -129,7 +173,7 @@ describe("Incident Console", () => {
     render(<App />);
 
     expect(await screen.findByText("Systems ready")).toBeInTheDocument();
-    expect(screen.getAllByText("node-001")).toHaveLength(4);
+    expect(screen.getAllByText("node-001").length).toBeGreaterThanOrEqual(4);
     await waitFor(() =>
       expect(screen.getAllByText("26.9%").length).toBeGreaterThan(0)
     );
@@ -140,6 +184,22 @@ describe("Incident Console", () => {
       screen.getByText("Threshold in 1.0h · high confidence · CPU · backtest ±0.00")
     ).toBeInTheDocument();
     expect(screen.getByText("CPU fallback active")).toBeInTheDocument();
+    expect(screen.getByText("Incident response queue")).toBeInTheDocument();
+    expect(screen.getByText("Memory exhaustion risk")).toBeInTheDocument();
+    expect(screen.getByText(/3 occurrences · last seen/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Acknowledge" }));
+    await waitFor(() =>
+      expect(
+        vi.mocked(fetch).mock.calls.some(
+          ([path, init]) =>
+            path ===
+              "/v1/incidents/34d6a69e-e40a-42a1-9b45-549d8a949d59/acknowledge" &&
+            init?.method === "POST"
+        )
+      ).toBe(true)
+    );
+    expect(await screen.findByText(/owner on-call/)).toBeInTheDocument();
   });
 
   it("shows an explicit degraded state when refresh fails", async () => {

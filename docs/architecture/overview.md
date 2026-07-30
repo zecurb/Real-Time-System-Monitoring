@@ -89,3 +89,16 @@ and a CUDA device passes runtime detection, regression arrays execute on the
 GPU. Provider resolution and computation failures remain observable through
 `/v1/runtime` and forecast metadata. The collector and durable pipeline never
 require a GPU.
+
+## Incident lifecycle boundary
+
+Phase 9 correlates warning and critical anomaly or forecast evidence by
+`(node_id, metric_name)`. Evidence is independently deduplicated by
+`(event_id, metric_name, source)`, so at-least-once worker retries cannot
+inflate occurrence counts. Critical evidence escalates an existing warning;
+new evidence reopens a resolved incident.
+
+Operators acknowledge and resolve incidents through revision-checked API
+commands. Every automatic and operator transition appends an immutable
+timeline record. PostgreSQL row locks serialize production updates, while the
+revision field rejects stale browser actions and makes conflicts explicit.

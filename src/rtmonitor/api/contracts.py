@@ -166,3 +166,63 @@ class RuntimeResponse(StrictModel):
     active: Literal["cpu", "gpu"]
     accelerator: str | None
     fallback_reason: str | None
+
+
+class IncidentResponse(StrictModel):
+    incident_id: UUID
+    node_id: str
+    metric_name: str
+    status: Literal["open", "acknowledged", "resolved"]
+    severity: Literal["warning", "critical"]
+    title: str
+    summary: str
+    occurrence_count: NonNegativeInt
+    first_seen: datetime
+    last_seen: datetime
+    owner: str | None
+    acknowledged_at: datetime | None
+    resolved_at: datetime | None
+    resolution_note: str | None
+    revision: NonNegativeInt
+    updated_at: datetime
+
+
+class IncidentListResponse(StrictModel):
+    incidents: list[IncidentResponse]
+
+
+class IncidentTimelineEventResponse(StrictModel):
+    timeline_id: UUID
+    incident_id: UUID
+    action: Literal["opened", "escalated", "acknowledged", "resolved", "reopened"]
+    actor: str
+    note: str | None
+    from_status: Literal["open", "acknowledged", "resolved"] | None
+    to_status: Literal["open", "acknowledged", "resolved"]
+    occurred_at: datetime
+
+
+class IncidentTimelineResponse(StrictModel):
+    events: list[IncidentTimelineEventResponse]
+
+
+Actor = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._@ -]{0,127}$",
+    ),
+]
+
+
+class AcknowledgeIncidentRequest(StrictModel):
+    actor: Actor
+    note: Annotated[str | None, Field(max_length=2048)] = None
+    expected_revision: NonNegativeInt
+
+
+class ResolveIncidentRequest(StrictModel):
+    actor: Actor
+    note: Annotated[str, Field(min_length=3, max_length=2048)]
+    expected_revision: NonNegativeInt

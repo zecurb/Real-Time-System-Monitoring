@@ -24,6 +24,10 @@ is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/v1/anomalies` | Returns bounded explainable anomaly findings |
 | `GET` | `/v1/forecasts` | Returns resource threshold forecasts |
 | `GET` | `/v1/runtime` | Reports prediction provider and CPU fallback reason |
+| `GET` | `/v1/incidents` | Lists correlated incidents |
+| `GET` | `/v1/incidents/{incident_id}/timeline` | Returns an incident audit timeline |
+| `POST` | `/v1/incidents/{incident_id}/acknowledge` | Assigns and acknowledges an incident |
+| `POST` | `/v1/incidents/{incident_id}/resolve` | Resolves an incident with a required note |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
 Accepted and duplicate events return HTTP `202`. Invalid contracts return `422`. Requests
@@ -103,3 +107,19 @@ any CPU fallback reason.
 an operator-installed CuPy package compatible with the host CUDA runtime. A
 missing package, missing device, or runtime failure safely selects CPU and
 reports why.
+
+## Incident workflow
+
+`/v1/incidents` accepts optional `status`, `node_id`, and bounded `limit`
+filters. Each incident groups durable anomaly and forecast evidence for one
+node and metric. `occurrence_count` only increases for a newly inserted signal.
+
+Acknowledgement and resolution requests require an operator `actor` and the
+incident's current `expected_revision`. A stale revision or invalid lifecycle
+transition returns `409`. Resolution also requires a meaningful note. New
+evidence automatically reopens a resolved incident and clears its previous
+owner and resolution fields; the prior timeline remains immutable.
+
+The actor field is an audit label, not authentication. A production ingress
+must authenticate users, authorize incident mutations, and derive a trusted
+actor identity instead of accepting it directly from an untrusted client.

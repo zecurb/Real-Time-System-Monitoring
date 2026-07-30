@@ -19,11 +19,16 @@ from fastapi.responses import JSONResponse
 from rtmonitor.api.config import ApiSettings
 from rtmonitor.api.contracts import (
     AcceptedResponse,
+    AcknowledgeIncidentRequest,
     AnomalyListResponse,
     AnomalyResponse,
     ForecastListResponse,
     ForecastResponse,
     HealthResponse,
+    IncidentListResponse,
+    IncidentResponse,
+    IncidentTimelineEventResponse,
+    IncidentTimelineResponse,
     MetricCatalogResponse,
     MetricDefinitionResponse,
     MetricHistoryResponse,
@@ -31,6 +36,7 @@ from rtmonitor.api.contracts import (
     NodeListResponse,
     NodeSummaryResponse,
     PipelineStatusResponse,
+    ResolveIncidentRequest,
     RuntimeResponse,
     TelemetryEventRequest,
 )
@@ -38,7 +44,15 @@ from rtmonitor.api.logging import configure_logging, log_event
 from rtmonitor.api.pagination import decode_metric_cursor, encode_metric_cursor
 from rtmonitor.execution import resolve_execution_provider
 from rtmonitor.metrics import METRIC_DEFINITIONS
-from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
+from rtmonitor.storage import (
+    EventStore,
+    Incident,
+    IncidentConflictError,
+    IncidentNotFoundError,
+    InvalidIncidentTransitionError,
+    SqlAlchemyEventStore,
+    StoreResult,
+)
 from rtmonitor.storage.sqlalchemy import StorageUnavailableError
 
 LOGGER = logging.getLogger("rtmonitor.api")
@@ -50,6 +64,27 @@ def _request_id(request: Request) -> str:
     if REQUEST_ID_PATTERN.fullmatch(supplied):
         return supplied
     return str(uuid.uuid4())
+
+
+def _incident_response(incident: Incident) -> IncidentResponse:
+    return IncidentResponse(
+        incident_id=uuid.UUID(incident.incident_id),
+        node_id=incident.node_id,
+        metric_name=incident.metric_name,
+        status=incident.status,
+        severity=incident.severity,
+        title=incident.title,
+        summary=incident.summary,
+        occurrence_count=incident.occurrence_count,
+        first_seen=incident.first_seen,
+        last_seen=incident.last_seen,
+        owner=incident.owner,
+        acknowledged_at=incident.acknowledged_at,
+        resolved_at=incident.resolved_at,
+        resolution_note=incident.resolution_note,
+        revision=incident.revision,
+        updated_at=incident.updated_at,
+    )
 
 
 def create_app(
@@ -68,10 +103,10 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.8.0",
+        version="0.9.0",
         description=(
-            "Ingests telemetry and serves explainable anomalies and "
-            "hardware-aware resource forecasts."
+            "Ingests telemetry, correlates predictive signals, and serves "
+            "auditable incident-response workflows."
         ),
         lifespan=lifespan,
     )
@@ -285,6 +320,121 @@ def create_app(
                 )
                 for item in results
             ]
+        )
+
+    @app.get("/v1/incidents", response_model=IncidentListResponse)
+    async def incidents(
+        status_filter: Annotated[
+            Literal["open", "acknowledged", "resolved"] | None,
+            Query(alias="status"),
+        ] = None,
+        node_id: Annotated[str | None, Query(min_length=3, max_length=128)] = None,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> IncidentListResponse:
+        results = await resolved_store.list_incidents(
+            status=status_filter,
+            node_id=node_id,
+            limit=limit,
+        )
+        return IncidentListResponse(
+            incidents=[_incident_response(incident) for incident in results]
+        )
+
+    @app.get(
+        "/v1/incidents/{incident_id}/timeline",
+        response_model=IncidentTimelineResponse,
+    )
+    async def incident_timeline(
+        incident_id: uuid.UUID,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> IncidentTimelineResponse:
+        try:
+            events = await resolved_store.incident_timeline(
+                incident_id=str(incident_id),
+                limit=limit,
+            )
+        except IncidentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="incident not found") from exc
+        except StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="incident storage is unavailable",
+                headers={"Retry-After": "5"},
+            ) from exc
+        return IncidentTimelineResponse(
+            events=[
+                IncidentTimelineEventResponse(
+                    timeline_id=uuid.UUID(event.timeline_id),
+                    incident_id=uuid.UUID(event.incident_id),
+                    action=event.action,
+                    actor=event.actor,
+                    note=event.note,
+                    from_status=event.from_status,
+                    to_status=event.to_status,
+                    occurred_at=event.occurred_at,
+                )
+                for event in events
+            ]
+        )
+
+    async def transition(
+        *,
+        incident_id: uuid.UUID,
+        action: Literal["acknowledge", "resolve"],
+        actor: str,
+        note: str | None,
+        expected_revision: int,
+    ) -> IncidentResponse:
+        try:
+            updated = await resolved_store.transition_incident(
+                incident_id=str(incident_id),
+                action=action,
+                actor=actor,
+                note=note,
+                expected_revision=expected_revision,
+            )
+        except IncidentNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="incident not found") from exc
+        except (IncidentConflictError, InvalidIncidentTransitionError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except StorageUnavailableError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="incident storage is unavailable",
+                headers={"Retry-After": "5"},
+            ) from exc
+        return _incident_response(updated)
+
+    @app.post(
+        "/v1/incidents/{incident_id}/acknowledge",
+        response_model=IncidentResponse,
+    )
+    async def acknowledge_incident(
+        incident_id: uuid.UUID,
+        body: AcknowledgeIncidentRequest,
+    ) -> IncidentResponse:
+        return await transition(
+            incident_id=incident_id,
+            action="acknowledge",
+            actor=body.actor,
+            note=body.note,
+            expected_revision=body.expected_revision,
+        )
+
+    @app.post(
+        "/v1/incidents/{incident_id}/resolve",
+        response_model=IncidentResponse,
+    )
+    async def resolve_incident(
+        incident_id: uuid.UUID,
+        body: ResolveIncidentRequest,
+    ) -> IncidentResponse:
+        return await transition(
+            incident_id=incident_id,
+            action="resolve",
+            actor=body.actor,
+            note=body.note,
+            expected_revision=body.expected_revision,
         )
 
     @app.get(
