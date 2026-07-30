@@ -19,10 +19,10 @@ is available at `http://127.0.0.1:8000/docs`.
 | `GET` | `/health/ready` | Confirms the service can accept another event |
 | `POST` | `/v1/telemetry` | Validates and accepts a schema `1.0` event |
 
-Accepted events return HTTP `202`. Invalid contracts return `422`. Requests
+Accepted and duplicate events return HTTP `202`. Invalid contracts return `422`. Requests
 with a declared body larger than the configured limit return `413`. When the
-bounded buffer is full, ingestion and readiness return `503`; ingestion also
-returns `Retry-After: 5`.
+database is unavailable or has not been migrated, readiness and ingestion
+return `503`; ingestion also returns `Retry-After: 5`.
 
 Every response includes:
 
@@ -36,19 +36,30 @@ underscores, or hyphens. Invalid values are replaced with a generated UUID.
 
 | Variable | Default | Description |
 | --- | ---: | --- |
-| `RTMONITOR_BUFFER_CAPACITY` | `10000` | Maximum events held in memory |
+| `RTMONITOR_DATABASE_URL` | `sqlite+aiosqlite:///./rtmonitor.db` | SQLAlchemy database URL |
 | `RTMONITOR_MAX_REQUEST_BYTES` | `65536` | Maximum declared request size |
 
-Both values must be positive integers. Invalid configuration prevents startup.
+The request limit must be a positive integer. Invalid configuration prevents
+startup.
 
-## Current durability boundary
+## Durability and idempotency
 
-The Phase 2 buffer is in memory. Events are lost if the process restarts, and
-the buffer does not drain. This is intentional and must not be mistaken for
-durable production storage. Phase 3 will replace it with durable transport and
-consumer acknowledgements.
+The API commits an event before returning `202`. `event_id` is the primary key,
+so retrying an already committed event returns `status: duplicate` without
+creating another record. Database schema changes are applied with:
+
+```bash
+alembic upgrade head
+```
+
+SQLite is supported for local development and tests. PostgreSQL is the
+production target. Durable storage does not yet provide the high-throughput
+stream buffering planned for the next distributed pipeline phase.
 
 The application checks `Content-Length` to reject declared oversized bodies.
 A production ingress proxy must also enforce request-size limits, including
 chunked requests, until a streaming body-limit middleware is implemented.
+
+See the [storage guide](../storage/postgresql.md) for PostgreSQL startup and
+migration commands.
 
