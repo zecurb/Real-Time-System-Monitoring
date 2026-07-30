@@ -10,7 +10,6 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from rtmonitor.api.contracts import TelemetryEventRequest
 from rtmonitor.api.logging import log_event
 from rtmonitor.storage import QueueLease, QueueStatus, SqlAlchemyEventStore
 
@@ -56,23 +55,18 @@ class WorkerSettings:
         )
 
 
-async def validate_telemetry(payload: dict[str, object]) -> None:
-    """Phase 4 processor boundary; later phases add enrichment and prediction."""
-    TelemetryEventRequest.model_validate(payload)
-
-
 class PipelineWorker:
     def __init__(
         self,
         *,
         store: SqlAlchemyEventStore,
         settings: WorkerSettings,
-        processor: Processor = validate_telemetry,
+        processor: Processor | None = None,
         worker_id: str | None = None,
     ) -> None:
         self._store = store
         self._settings = settings
-        self._processor = processor
+        self._processor = processor or self._store.write_metric_samples
         self.worker_id = worker_id or f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}"
 
     async def process_batch(self) -> int:
