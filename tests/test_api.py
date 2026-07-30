@@ -115,6 +115,19 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.json()["points"], [])
         self.assertIsNone(response.json()["next_cursor"])
 
+    def test_exposes_metric_catalog_and_node_discovery(self) -> None:
+        catalog = self.client.get("/v1/metrics")
+        nodes = self.client.get("/v1/nodes")
+
+        self.assertEqual(catalog.status_code, 200)
+        self.assertEqual(len(catalog.json()["metrics"]), 14)
+        self.assertIn(
+            "memory.used.percent",
+            {metric["name"] for metric in catalog.json()["metrics"]},
+        )
+        self.assertEqual(nodes.status_code, 200)
+        self.assertEqual(nodes.json(), {"nodes": []})
+
     def test_rejects_oversized_metric_query_window(self) -> None:
         response = self.client.get(
             "/v1/metrics/test-node-001",
