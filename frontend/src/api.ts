@@ -1,10 +1,12 @@
 import type {
   Anomaly,
+  Forecast,
   Health,
   MetricDefinition,
   MetricHistory,
   NodeSummary,
-  PipelineStatus
+  PipelineStatus,
+  Runtime
 } from "./types";
 
 async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -53,5 +55,8 @@ export const api = {
     return (
       await request<{ anomalies: Anomaly[] }>(`/v1/anomalies?${params}`, signal)
     ).anomalies;
-  }
+  },
+  forecasts: async (signal?: AbortSignal) =>
+    (await request<{ forecasts: Forecast[] }>("/v1/forecasts", signal)).forecasts,
+  runtime: (signal?: AbortSignal) => request<Runtime>("/v1/runtime", signal)
 };

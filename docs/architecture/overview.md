@@ -74,3 +74,18 @@ The detector intentionally runs inside the durable leased processing path. A
 failed analysis therefore uses the existing retry and dead-letter contract.
 The dashboard reads bounded findings from `/v1/anomalies`; it does not perform
 or reinterpret scoring in the browser.
+
+## Forecasting and hardware boundary
+
+The Phase 8 worker forecasts memory and disk exhaustion from the newest 2,048
+samples in a bounded seven-day window. A least-squares trend must have at least
+six samples, span at least five minutes, and pass an R² quality gate before the
+system persists a threshold crossing. Each record includes its slope, horizon,
+confidence, risk, one-step backtest error, and actual execution provider.
+
+CPU execution is always available and remains the automatic fallback for the
+two hosts without working GPUs. If an operator installs a compatible CuPy build
+and a CUDA device passes runtime detection, regression arrays execute on the
+GPU. Provider resolution and computation failures remain observable through
+`/v1/runtime` and forecast metadata. The collector and durable pipeline never
+require a GPU.

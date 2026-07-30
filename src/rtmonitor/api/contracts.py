@@ -136,3 +136,33 @@ class AnomalyResponse(StrictModel):
 
 class AnomalyListResponse(StrictModel):
     anomalies: list[AnomalyResponse]
+
+
+class ForecastResponse(StrictModel):
+    event_id: UUID
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    current_value: float
+    threshold: float
+    slope_per_hour: float
+    hours_to_threshold: NonNegativeFloat
+    predicted_at: datetime
+    r_squared: Percentage
+    confidence: Literal["medium", "high"]
+    risk: Literal["watch", "warning", "critical"]
+    sample_count: NonNegativeInt
+    backtest_error: NonNegativeFloat | None
+    provider: Literal["cpu", "gpu"]
+    fallback_reason: str | None
+
+
+class ForecastListResponse(StrictModel):
+    forecasts: list[ForecastResponse]
+
+
+class RuntimeResponse(StrictModel):
+    requested: Literal["auto", "cpu", "gpu"]
+    active: Literal["cpu", "gpu"]
+    accelerator: str | None
+    fallback_reason: str | None

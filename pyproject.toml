@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "real-time-system-monitoring"
-version = "0.7.0"
-description = "CPU-first predictive observability with explainable anomaly detection"
+version = "0.8.0"
+description = "Hardware-aware predictive observability and failure forecasting"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Proprietary" }

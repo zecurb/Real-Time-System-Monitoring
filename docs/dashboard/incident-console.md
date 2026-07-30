@@ -19,7 +19,9 @@ Open `http://127.0.0.1:5173`.
 3. Select a monitored node.
 4. Select a metric and a one-, six-, or 24-hour window.
 5. Hover or focus the historical chart points for exact timestamps and values.
-6. If the degraded banner appears, preserve the last-known view and investigate
+6. Review recent anomalies and resource forecasts, including threshold horizon,
+   confidence, execution provider, and backtest error.
+7. If the degraded banner appears, preserve the last-known view and investigate
    API readiness before trusting freshness.
 
 ## Production build
@@ -43,3 +45,4 @@ server as a production service.
 - An explicit alert states that live data is interrupted.
 - Empty time windows display an intentional empty state.
 - Retry and dead-letter counts receive warning emphasis.
+- Forecast cards show the actual CPU/GPU provider and expose CPU fallback state.

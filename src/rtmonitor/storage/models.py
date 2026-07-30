@@ -128,3 +128,34 @@ class AnomalyRecord(Base):
         Index("ix_anomalies_node_observed", "node_id", "observed_at"),
         Index("ix_anomalies_severity_observed", "severity", "observed_at"),
     )
+
+
+class ForecastRecord(Base):
+    __tablename__ = "forecasts"
+
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("telemetry_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    current_value: Mapped[float] = mapped_column(Float, nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    slope_per_hour: Mapped[float] = mapped_column(Float, nullable=False)
+    hours_to_threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    predicted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    r_squared: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[str] = mapped_column(String(16), nullable=False)
+    risk: Mapped[str] = mapped_column(String(16), nullable=False)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    backtest_error: Mapped[float | None] = mapped_column(Float)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    fallback_reason: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_forecasts_node_predicted", "node_id", "predicted_at"),
+        Index("ix_forecasts_risk_predicted", "risk", "predicted_at"),
+    )

@@ -153,6 +153,59 @@ class PipelineWorkerTests(unittest.IsolatedAsyncioTestCase):
             )
             await store.close()
 
+    async def test_default_processor_persists_threshold_forecast(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            database_path = Path(temp_directory) / "telemetry.db"
+            store = SqlAlchemyEventStore(f"sqlite+aiosqlite:///{database_path}")
+            await store.create_schema_for_tests()
+            start = datetime(2026, 7, 30, tzinfo=UTC)
+            for index in range(7):
+                payload = valid_event()
+                payload["event_id"] = f"{index + 1}4d6a69e-e40a-42a1-9b45-549d8a949d59"
+                payload["observed_at"] = (start + timedelta(hours=index)).isoformat()
+                payload["metrics"]["memory"]["used_percent"] = 55.0 + index * 5
+                event = TelemetryEventRequest.model_validate(payload)
+                await store.store(event)
+                await store.process_telemetry(event.model_dump(mode="json"))
+
+            forecasts = await store.list_forecasts(node_id="test-node-001", limit=10)
+            self.assertEqual(len(forecasts), 1)
+            self.assertEqual(forecasts[0].metric_name, "memory.used.percent")
+            self.assertAlmostEqual(forecasts[0].hours_to_threshold, 1.0)
+            self.assertEqual(forecasts[0].risk, "critical")
+            self.assertEqual(forecasts[0].provider, "cpu")
+            self.assertIsNotNone(forecasts[0].fallback_reason)
+            self.assertAlmostEqual(forecasts[0].backtest_error or 0.0, 0.0)
+            await store.close()
+
+    async def test_recent_metric_window_returns_newest_points_chronologically(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temp_directory:
+            database_path = Path(temp_directory) / "telemetry.db"
+            store = SqlAlchemyEventStore(f"sqlite+aiosqlite:///{database_path}")
+            await store.create_schema_for_tests()
+            start = datetime(2026, 7, 30, tzinfo=UTC)
+            for index in range(5):
+                payload = valid_event()
+                payload["event_id"] = f"{index + 1}4d6a69e-e40a-42a1-9b45-549d8a949d59"
+                payload["observed_at"] = (start + timedelta(minutes=index)).isoformat()
+                payload["metrics"]["memory"]["used_percent"] = 20.0 + index
+                event = TelemetryEventRequest.model_validate(payload)
+                await store.store(event)
+                await store.write_metric_samples(event.model_dump(mode="json"))
+
+            recent = await store.query_recent_metric_samples(
+                node_id="test-node-001",
+                metric_name="memory.used.percent",
+                start=start,
+                end=start + timedelta(hours=1),
+                limit=2,
+            )
+
+            self.assertEqual([sample.value for sample in recent], [23.0, 24.0])
+            await store.close()
+
     async def test_metric_query_uses_stable_cursor_pagination(self) -> None:
         with tempfile.TemporaryDirectory() as temp_directory:
             database_path = Path(temp_directory) / "telemetry.db"

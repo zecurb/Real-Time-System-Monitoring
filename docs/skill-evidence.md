@@ -5,7 +5,7 @@ Resume skills move through: **introduced**, **practiced**, **demonstrated**, and
 
 | Skill | Status | Current evidence | Next validation |
 | --- | --- | --- | --- |
-| Python | Demonstrated | Typed collector, API, durable worker, anomaly engine, configuration, and 26-test suite pass lint and strict typing | Independently extend a processor |
+| Python | Demonstrated | Typed collector, API, durable worker, anomaly and forecast engines, configuration, and 38-test suite pass lint and strict typing | Independently extend a processor |
 | Linux telemetry | Practiced | `/proc` metrics collection and anonymized node identity are implemented | Explain and run on NixOS hosts |
 | API development | Demonstrated | Validated FastAPI ingestion contract, health/status endpoints, and failure tests | Independently modify an endpoint |
 | React and TypeScript | Practiced | Typed incident console, API client, state/effect handling, responsive SVG chart, degraded states, and component tests | Independently modify and explain dashboard behavior |
@@ -16,8 +16,15 @@ Resume skills move through: **introduced**, **practiced**, **demonstrated**, and
 | Durable storage | Practiced | Restart persistence and idempotent event ingestion tests | Validate PostgreSQL backup and recovery |
 | Resilient infrastructure | Practiced | Storage-aware readiness, idempotency, graceful shutdown, and failure responses | PostgreSQL dependency failure and recovery tests |
 | Distributed systems | Practiced | Atomic enqueue, at-least-once delivery, competing workers, leases, retries, dead letters, and recovery tests | Multi-node PostgreSQL load and failure testing |
-| Time-series analysis | Demonstrated | Normalized series, bounded range queries, stable cursors, retention, historical backfill, and robust per-node baselines | Add seasonality and forecasting |
-| Machine learning | Practiced | CPU-based robust anomaly scoring, cold-start policy, explainable scores, severity thresholds, and deterministic evaluation tests | Train and evaluate a forecasting model |
+| Time-series analysis | Demonstrated | Normalized series, newest-window queries, stable cursors, retention, robust baselines, trend fitting, horizon prediction, and backtesting | Add seasonality-aware evaluation |
+| Machine learning | Demonstrated | Explainable anomaly scoring and threshold forecasting with quality gates, CPU/GPU execution, safe fallback, and deterministic evaluation tests | Compare against a seasonal model on labeled incidents |
+
+## Phase 8: failure forecasting
+
+- Implemented explainable trend regression, threshold-crossing horizons,
+  confidence gates, one-step backtesting, and insufficient-data behavior.
+- Added hardware-provider selection with optional GPU acceleration and safe,
+  observable CPU fallback for heterogeneous machines.
 ## Phase 7: explainable anomaly detection
 
 - Implemented robust time-series baselines with median absolute deviation.

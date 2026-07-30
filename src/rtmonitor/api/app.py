@@ -21,6 +21,8 @@ from rtmonitor.api.contracts import (
     AcceptedResponse,
     AnomalyListResponse,
     AnomalyResponse,
+    ForecastListResponse,
+    ForecastResponse,
     HealthResponse,
     MetricCatalogResponse,
     MetricDefinitionResponse,
@@ -29,10 +31,12 @@ from rtmonitor.api.contracts import (
     NodeListResponse,
     NodeSummaryResponse,
     PipelineStatusResponse,
+    RuntimeResponse,
     TelemetryEventRequest,
 )
 from rtmonitor.api.logging import configure_logging, log_event
 from rtmonitor.api.pagination import decode_metric_cursor, encode_metric_cursor
+from rtmonitor.execution import resolve_execution_provider
 from rtmonitor.metrics import METRIC_DEFINITIONS
 from rtmonitor.storage import EventStore, SqlAlchemyEventStore, StoreResult
 from rtmonitor.storage.sqlalchemy import StorageUnavailableError
@@ -64,8 +68,11 @@ def create_app(
 
     app = FastAPI(
         title="Real-Time System Monitoring Ingestion API",
-        version="0.7.0",
-        description="Ingests telemetry and serves explainable CPU-based anomaly findings.",
+        version="0.8.0",
+        description=(
+            "Ingests telemetry and serves explainable anomalies and "
+            "hardware-aware resource forecasts."
+        ),
         lifespan=lifespan,
     )
 
@@ -237,6 +244,46 @@ def create_app(
                     sample_count=finding.sample_count,
                 )
                 for finding in findings
+            ]
+        )
+
+    @app.get("/v1/runtime", response_model=RuntimeResponse)
+    async def runtime() -> RuntimeResponse:
+        provider = resolve_execution_provider()
+        return RuntimeResponse(
+            requested=provider.requested,
+            active=provider.active,
+            accelerator=provider.accelerator,
+            fallback_reason=provider.fallback_reason,
+        )
+
+    @app.get("/v1/forecasts", response_model=ForecastListResponse)
+    async def forecasts(
+        node_id: Annotated[str | None, Query(min_length=3, max_length=128)] = None,
+        limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    ) -> ForecastListResponse:
+        results = await resolved_store.list_forecasts(node_id=node_id, limit=limit)
+        return ForecastListResponse(
+            forecasts=[
+                ForecastResponse(
+                    event_id=uuid.UUID(item.event_id),
+                    node_id=item.node_id,
+                    metric_name=item.metric_name,
+                    observed_at=item.observed_at,
+                    current_value=item.current_value,
+                    threshold=item.threshold,
+                    slope_per_hour=item.slope_per_hour,
+                    hours_to_threshold=item.hours_to_threshold,
+                    predicted_at=item.predicted_at,
+                    r_squared=item.r_squared * 100,
+                    confidence=item.confidence,
+                    risk=item.risk,
+                    sample_count=item.sample_count,
+                    backtest_error=item.backtest_error,
+                    provider=item.provider,
+                    fallback_reason=item.fallback_reason,
+                )
+                for item in results
             ]
         )
 

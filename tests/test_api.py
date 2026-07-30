@@ -140,6 +140,15 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"anomalies": []})
 
+    def test_exposes_runtime_and_empty_forecasts(self) -> None:
+        runtime = self.client.get("/v1/runtime")
+        forecasts = self.client.get("/v1/forecasts")
+
+        self.assertEqual(runtime.status_code, 200)
+        self.assertIn(runtime.json()["active"], {"cpu", "gpu"})
+        self.assertEqual(forecasts.status_code, 200)
+        self.assertEqual(forecasts.json(), {"forecasts": []})
+
     def test_rejects_oversized_metric_query_window(self) -> None:
         response = self.client.get(
             "/v1/metrics/test-node-001",
