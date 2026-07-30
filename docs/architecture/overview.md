@@ -26,6 +26,9 @@ when dependencies fail.
   delivery may be repeated.
 - Ingestion and processing are decoupled through an atomic durable queue.
 - Worker leases recover abandoned work after a process failure.
+- Normalized metric samples use `(event_id, metric_name)` uniqueness so
+  at-least-once processing cannot duplicate time-series points.
+- Historical queries are bounded by time window and page size.
 
 ## Scaling path
 
@@ -35,3 +38,14 @@ delivery contract before adding a separate broker. Load tests will determine
 when a Kafka-compatible transport is justified. Partitioning, consumer groups,
 and retention will be added only alongside tests that demonstrate their
 behavior.
+
+## Time-series boundary
+
+The Phase 5 worker converts each schema `1.0` telemetry event into 14
+normalized metric samples. PostgreSQL indexes samples by node, metric,
+observation time, and event ID. This supports stable cursor pagination and
+future time-window features without scanning JSON event payloads.
+
+Raw events remain the source of truth. Normalized samples are a reproducible
+projection, which allows migration `0003` to requeue previously processed
+events for backfill.

@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -60,4 +70,36 @@ class PipelineQueueRecord(Base):
             "available_at",
             "lease_expires_at",
         ),
+    )
+
+
+class MetricSampleRecord(Base):
+    __tablename__ = "metric_samples"
+
+    event_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("telemetry_events.event_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    metric_name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    node_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    labels: Mapped[dict[str, str]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "metric_name", name="uq_metric_samples_event_metric"),
+        Index(
+            "ix_metric_samples_node_metric_observed",
+            "node_id",
+            "metric_name",
+            "observed_at",
+            "event_id",
+        ),
+        Index("ix_metric_samples_observed_at", "observed_at"),
     )

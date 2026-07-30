@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -38,6 +39,16 @@ class QueueStats:
     dead_letter: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class MetricSample:
+    event_id: str
+    node_id: str
+    metric_name: str
+    observed_at: datetime
+    value: float
+    labels: dict[str, str]
+
+
 class EventStore(Protocol):
     async def store(self, event: TelemetryEventRequest) -> StoreResult: ...
 
@@ -46,6 +57,17 @@ class EventStore(Protocol):
     async def queue_depth(self) -> int: ...
 
     async def queue_stats(self) -> QueueStats: ...
+
+    async def query_metric_samples(
+        self,
+        *,
+        node_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+        cursor: tuple[datetime, str] | None = None,
+    ) -> list[MetricSample]: ...
 
     async def ping(self) -> bool: ...
 

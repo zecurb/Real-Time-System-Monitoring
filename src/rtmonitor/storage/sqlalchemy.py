@@ -4,17 +4,31 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
+from sqlalchemy.sql import Executable
 
 from rtmonitor.api.contracts import TelemetryEventRequest
-from rtmonitor.storage.base import QueueLease, QueueStats, QueueStatus, StoreResult
-from rtmonitor.storage.models import Base, PipelineQueueRecord, TelemetryRecord
+from rtmonitor.storage.base import MetricSample, QueueLease, QueueStats, QueueStatus, StoreResult
+from rtmonitor.storage.models import (
+    Base,
+    MetricSampleRecord,
+    PipelineQueueRecord,
+    TelemetryRecord,
+)
 
 
 class StorageUnavailableError(RuntimeError):
     """Raised when an event cannot be durably committed."""
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class SqlAlchemyEventStore:
@@ -208,6 +222,128 @@ class SqlAlchemyEventStore:
                 select(PipelineQueueRecord.status).where(PipelineQueueRecord.event_id == event_id)
             )
             return QueueStatus(value) if value is not None else None
+
+    async def write_metric_samples(self, payload: dict[str, object]) -> int:
+        event = TelemetryEventRequest.model_validate(payload)
+        metrics = event.metrics
+        values = {
+            "system.load.1m": metrics.load_1m,
+            "system.load.5m": metrics.load_5m,
+            "system.load.15m": metrics.load_15m,
+            "system.cpu.count": metrics.cpu_count,
+            "system.uptime.seconds": metrics.uptime_seconds,
+            "system.process.count": metrics.process_count,
+            "memory.total.bytes": metrics.memory.total_bytes,
+            "memory.available.bytes": metrics.memory.available_bytes,
+            "memory.used.percent": metrics.memory.used_percent,
+            "disk.total.bytes": metrics.disk.total_bytes,
+            "disk.free.bytes": metrics.disk.free_bytes,
+            "disk.used.percent": metrics.disk.used_percent,
+            "network.received.bytes": metrics.network.received_bytes,
+            "network.transmitted.bytes": metrics.network.transmitted_bytes,
+        }
+        event_id = str(event.event_id)
+        now = datetime.now(UTC)
+        rows = [
+            {
+                "event_id": event_id,
+                "node_id": event.node_id,
+                "metric_name": metric_name,
+                "observed_at": event.observed_at,
+                "value": float(value),
+                "labels": ({"path": metrics.disk.path} if metric_name.startswith("disk.") else {}),
+                "created_at": now,
+            }
+            for metric_name, value in values.items()
+        ]
+        statement: Executable
+        if self._engine.dialect.name == "postgresql":
+            statement = (
+                postgresql_insert(MetricSampleRecord)
+                .values(rows)
+                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+            )
+        elif self._engine.dialect.name == "sqlite":
+            statement = (
+                sqlite_insert(MetricSampleRecord)
+                .values(rows)
+                .on_conflict_do_nothing(index_elements=["event_id", "metric_name"])
+            )
+        else:
+            raise StorageUnavailableError("unsupported metric storage dialect")
+        async with self._sessions() as session:
+            try:
+                await session.execute(statement)
+                await session.commit()
+            except SQLAlchemyError as exc:
+                await session.rollback()
+                raise StorageUnavailableError("metric sample write failed") from exc
+        return len(rows)
+
+    async def query_metric_samples(
+        self,
+        *,
+        node_id: str,
+        metric_name: str,
+        start: datetime,
+        end: datetime,
+        limit: int,
+        cursor: tuple[datetime, str] | None = None,
+    ) -> list[MetricSample]:
+        statement = (
+            select(MetricSampleRecord)
+            .where(
+                MetricSampleRecord.node_id == node_id,
+                MetricSampleRecord.metric_name == metric_name,
+                MetricSampleRecord.observed_at >= start,
+                MetricSampleRecord.observed_at < end,
+            )
+            .order_by(MetricSampleRecord.observed_at, MetricSampleRecord.event_id)
+            .limit(limit)
+        )
+        if cursor is not None:
+            statement = statement.where(
+                tuple_(MetricSampleRecord.observed_at, MetricSampleRecord.event_id) > cursor
+            )
+        async with self._sessions() as session:
+            records = (await session.scalars(statement)).all()
+        return [
+            MetricSample(
+                event_id=record.event_id,
+                node_id=record.node_id,
+                metric_name=record.metric_name,
+                observed_at=_utc(record.observed_at),
+                value=record.value,
+                labels=dict(record.labels),
+            )
+            for record in records
+        ]
+
+    async def prune_metric_samples(self, *, before: datetime, batch_size: int) -> int:
+        async with self._sessions() as session:
+            keys = (
+                await session.execute(
+                    select(MetricSampleRecord.event_id, MetricSampleRecord.metric_name)
+                    .where(MetricSampleRecord.observed_at < before)
+                    .order_by(MetricSampleRecord.observed_at)
+                    .limit(batch_size)
+                )
+            ).all()
+            if not keys:
+                return 0
+            result = await session.scalars(
+                delete(MetricSampleRecord)
+                .where(
+                    tuple_(
+                        MetricSampleRecord.event_id,
+                        MetricSampleRecord.metric_name,
+                    ).in_(keys)
+                )
+                .returning(MetricSampleRecord.metric_name)
+            )
+            deleted = len(result.all())
+            await session.commit()
+            return deleted
 
     async def ping(self) -> bool:
         try:
