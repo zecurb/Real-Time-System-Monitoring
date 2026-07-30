@@ -1,5 +1,9 @@
 # Contributing
 
+This is a source-visible proprietary project. External code contributions are
+not accepted unless the contributor and copyright holder first enter a written
+contribution agreement. Issues and non-code feedback are welcome.
+
 ## Engineering expectations
 
 Every change should improve or preserve:
@@ -20,4 +24,3 @@ Every change should improve or preserve:
 
 Do not commit credentials, raw production logs, hostnames, usernames, IP
 addresses, API tokens, or unreviewed personally identifiable information.
-
