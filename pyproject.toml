@@ -32,6 +32,7 @@ rtmonitor = "rtmonitor.cli:main"
 rtmonitor-api = "rtmonitor.api.main:run"
 rtmonitor-worker = "rtmonitor.pipeline.main:run"
 rtmonitor-retention = "rtmonitor.retention:run"
+rtmonitor-desktop = "rtmonitor.desktop:run"
 
 [tool.setuptools.packages.find]
 where = ["src"]
