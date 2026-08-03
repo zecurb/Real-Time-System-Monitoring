@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import socket
 import sys
@@ -18,6 +19,8 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from rtmonitor.api.app import create_app
+from rtmonitor.pipeline.worker import PipelineWorker, WorkerSettings
+from rtmonitor.storage import SqlAlchemyEventStore
 
 PRODUCT_DIRECTORY = "Real-Time System Monitoring"
 DEFAULT_PORT = 8765
@@ -63,6 +66,20 @@ def _build_application(resource_root: Path) -> FastAPI:
     return app
 
 
+async def _run_pipeline_worker() -> None:
+    settings = WorkerSettings.from_environment()
+    store = SqlAlchemyEventStore(settings.database_url)
+    worker = PipelineWorker(store=store, settings=settings)
+    try:
+        await worker.run()
+    finally:
+        await store.close()
+
+
+def _start_pipeline_worker() -> None:
+    asyncio.run(_run_pipeline_worker())
+
+
 def _open_browser_when_ready(port: int) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
@@ -98,6 +115,7 @@ def run() -> None:
     _apply_migrations(resource_root, database_url)
     app = _build_application(resource_root)
 
+    threading.Thread(target=_start_pipeline_worker, daemon=True).start()
     if not args.no_browser:
         threading.Thread(
             target=_open_browser_when_ready,
