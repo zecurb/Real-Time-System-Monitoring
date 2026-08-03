@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import time
 import uuid
 from datetime import UTC, datetime
@@ -30,7 +31,8 @@ class WindowsCollector:
         disk_path: Path | None = None,
         node_id: str | None = None,
     ) -> None:
-        self._disk_path = disk_path or Path(os.getenv("SystemDrive", "C:")) / "\\"
+        system_drive = os.getenv("SystemDrive", "C:")
+        self._disk_path = disk_path or Path(f"{system_drive}\\")
         self._node_id = node_id or self._anonymous_node_id()
 
     def collect(self) -> TelemetryEvent:
@@ -76,14 +78,17 @@ class WindowsCollector:
 
     @staticmethod
     def _anonymous_node_id() -> str:
-        try:
+        if sys.platform != "win32":
+            raw_id = str(uuid.getnode())
+        else:
             import winreg
 
-            with winreg.OpenKey(
-                winreg.HKEY_LOCAL_MACHINE,
-                r"SOFTWARE\Microsoft\Cryptography",
-            ) as key:
-                raw_id, _ = winreg.QueryValueEx(key, "MachineGuid")
-        except (OSError, ImportError):
-            raw_id = str(uuid.getnode())
+            try:
+                with winreg.OpenKey(
+                    winreg.HKEY_LOCAL_MACHINE,
+                    r"SOFTWARE\Microsoft\Cryptography",
+                ) as key:
+                    raw_id, _ = winreg.QueryValueEx(key, "MachineGuid")
+            except OSError:
+                raw_id = str(uuid.getnode())
         return hashlib.sha256(str(raw_id).encode()).hexdigest()[:16]
