@@ -4,18 +4,30 @@ A production-oriented predictive observability platform for detecting developing
 
 The platform collects infrastructure telemetry, stores and processes events durably, detects explainable anomalies, forecasts resource exhaustion, and presents auditable incident evidence to operators.
 
-> Status: Version 1.0.0 — release-hardened production-oriented reference implementation.
+> Status: Version 1.1.0 — Windows desktop distribution and public product website.
+
+## Download for Windows
+
+Download the self-contained Windows application:
+
+- [RealTimeSystemMonitoring.exe](https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe)
+- [SHA-256 checksum](https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe.sha256)
+- [Product website](https://zecurb.github.io/Real-Time-System-Monitoring/)
+
+The executable requires Windows 10 or 11 on x64 hardware. It collects local Windows telemetry, creates its local SQLite database, applies migrations, starts the background processing worker, serves the bundled incident console, and opens the console in the default browser.
+
+The initial executable is not Authenticode-signed, so Windows may display an unrecognized publisher warning. Verify the published SHA-256 checksum before running it.
 
 ## Current capabilities
 
-- Collects Linux CPU load, memory, disk, network, uptime, and process counts.
+- Collects Linux and Windows load, CPU count, memory, disk, network, uptime, and process-count telemetry.
 - Emits one versioned JSON event per collection interval.
-- Keeps collection lightweight while the API, storage, and prediction services use pinned Python dependencies.
-- Runs on headless, CPU-only Linux systems; no GPU is required.
+- Keeps collection lightweight while the API, storage, and prediction services use bounded dependencies.
+- Runs on CPU-only systems; no GPU is required.
 - Handles shutdown signals and collection errors without producing malformed telemetry.
 - Validates versioned telemetry through a FastAPI ingestion service.
 - Provides request correlation, structured logs, health checks, payload limits, and storage-aware readiness.
-- Persists telemetry through SQLAlchemy with idempotent event IDs, Alembic migrations, PostgreSQL production support, and SQLite development support.
+- Persists telemetry through SQLAlchemy with idempotent event IDs, Alembic migrations, PostgreSQL production support, and SQLite desktop/development support.
 - Atomically enqueues accepted telemetry for asynchronous processing.
 - Runs independent CPU-only workers with bounded batches, expiring leases, competing-worker isolation, exponential retry, and dead-letter handling.
 - Reports pipeline depth and per-state totals for incident visibility.
@@ -27,15 +39,17 @@ The platform collects infrastructure telemetry, stores and processes events dura
 - Forecasts reliable memory and disk threshold crossings with confidence, risk, backtesting, and observable CPU/GPU provider selection.
 - Correlates anomaly and forecast evidence into durable incidents by node and metric, with retry-safe occurrence counting and severity escalation.
 - Supports acknowledgement, resolution, reopening, optimistic revision checks, ownership, and an immutable operator timeline.
+- Builds and smoke-tests a self-contained Windows executable through GitHub Actions.
+- Publishes a GitHub Pages product website and checksummed Windows release assets.
 - Includes automated tests, strict type checking, linting, frontend validation, CI, CodeQL, Dependabot, and tagged release automation.
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A["Linux hosts"] --> B["Telemetry collector"]
+    A["Linux and Windows hosts"] --> B["Telemetry collectors"]
     B --> C["FastAPI ingestion"]
-    C --> D["PostgreSQL event and queue storage"]
+    C --> D["PostgreSQL or local SQLite storage"]
     D --> E["Leased processing workers"]
     E --> F["Normalized metrics"]
     E --> G["Anomaly and forecast evidence"]
@@ -44,11 +58,12 @@ flowchart TD
     I --> J["Incident API"]
     H --> K["React incident console"]
     J --> K
+    K --> L["Browser or Windows desktop distribution"]
 ```
 
 See [the architecture overview](docs/architecture/overview.md) for component responsibilities and failure boundaries.
 
-## Quick start
+## Linux and source quick start
 
 Requires Python 3.12 or newer on Linux.
 
@@ -171,7 +186,11 @@ nix develop
 
 ## Release history
 
-Version 1.0.0 completes the initial ten-phase implementation:
+Version 1.1.0 adds the eleventh implementation phase:
+
+11. Windows telemetry, self-contained desktop packaging, checksummed release assets, and public website deployment
+
+Version 1.0.0 completed the initial ten phases:
 
 1. Linux telemetry collector
 2. Versioned event contracts and ingestion API
@@ -188,9 +207,11 @@ See [CHANGELOG.md](CHANGELOG.md) for release details.
 
 ## Production-readiness statement
 
-Version 1.0.0 has passed the repository's automated Python, frontend, and Nix validation gates. It includes dependency automation, static security analysis, release automation, health checks, bounded processing, recovery behavior, and operational documentation.
+Version 1.1.0 retains the repository's automated Python, frontend, Nix, dependency, and security gates and adds a Windows packaging workflow that smoke-tests API readiness, dashboard delivery, and local Windows node discovery.
 
-It remains operator-managed software rather than a hosted managed service. Production deployments must provide authentication, authorization, trusted operator identity, TLS termination, secrets management, rate limiting, network isolation, capacity validation, and tested database backup and restoration.
+The desktop executable is a local single-node distribution using SQLite and one worker. It is not a replacement for the PostgreSQL-backed multi-worker production topology.
+
+The platform remains operator-managed software rather than a hosted managed service. Production deployments must provide authentication, authorization, trusted operator identity, TLS termination, secrets management, rate limiting, network isolation, capacity validation, and tested database backup and restoration.
 
 See the [production-readiness checklist](docs/production-readiness.md), [security policy](SECURITY.md), and [support policy](SUPPORT.md).
 
