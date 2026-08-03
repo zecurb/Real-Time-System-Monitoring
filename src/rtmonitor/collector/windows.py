@@ -31,7 +31,7 @@ class WindowsCollector:
         disk_path: Path | None = None,
         node_id: str | None = None,
     ) -> None:
-        system_drive = os.getenv("SystemDrive", "C:")
+        system_drive = os.getenv("SYSTEMDRIVE", "C:")
         self._disk_path = disk_path or Path(system_drive + "\\")
         self._node_id = node_id or self._anonymous_node_id()
 
