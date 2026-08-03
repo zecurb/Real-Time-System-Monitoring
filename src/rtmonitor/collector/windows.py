@@ -32,7 +32,7 @@ class WindowsCollector:
         node_id: str | None = None,
     ) -> None:
         system_drive = os.getenv("SystemDrive", "C:")
-        self._disk_path = disk_path or Path(f"{system_drive}\\")
+        self._disk_path = disk_path or Path(system_drive + "\\")
         self._node_id = node_id or self._anonymous_node_id()
 
     def collect(self) -> TelemetryEvent:
