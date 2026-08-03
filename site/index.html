@@ -42,7 +42,7 @@
           </div>
           <div class="release-status" role="status">
             <span class="status-dot"></span>
-            <span>Current stable release: v1.0.0</span>
+            <span>Current stable release: v1.1.0</span>
           </div>
         </div>
 
@@ -139,17 +139,28 @@
           <p class="eyebrow">Windows desktop distribution</p>
           <h2>Launch the dashboard without setting up Python or Node.js.</h2>
           <p>
-            The Windows executable initializes its local database, applies migrations, starts the
-            monitoring dashboard on your computer, and opens it in your default browser.
+            The Windows executable collects local system telemetry, initializes its SQLite
+            database, applies migrations, runs the analysis worker, starts the incident console,
+            and opens it in your default browser.
           </p>
         </div>
         <div class="download-card">
           <span class="platform">Windows 10/11 · x64</span>
           <h3>RealTimeSystemMonitoring.exe</h3>
           <p>Self-contained local desktop distribution</p>
-          <a class="button primary" href="https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest">
-            Get the latest release
+          <a
+            class="button primary"
+            href="https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe"
+          >
+            Download the Windows .exe
           </a>
+          <small>
+            Verify the
+            <a href="https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe.sha256">
+              SHA-256 checksum
+            </a>.
+            The initial build is not code-signed, so Windows may display an unrecognized publisher warning.
+          </small>
           <small>Source-visible proprietary software. Review the license before use.</small>
         </div>
       </section>
