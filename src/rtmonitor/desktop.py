@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from rtmonitor.api.app import create_app
-from rtmonitor.collector.linux import CollectionError, LinuxCollector
+from rtmonitor.collector.linux import LinuxCollector
 from rtmonitor.collector.windows import WindowsCollector
 from rtmonitor.models import TelemetryEvent
 from rtmonitor.pipeline.worker import PipelineWorker, WorkerSettings
@@ -125,7 +125,7 @@ def _run_collector(
     while not stop_event.is_set():
         try:
             _post_event(port, collector.collect())
-        except (CollectionError, OSError, RuntimeError) as exc:
+        except (OSError, RuntimeError) as exc:
             LOGGER.warning("local telemetry collection failed: %s", exc)
         stop_event.wait(interval)
 
