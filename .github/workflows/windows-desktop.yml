@@ -57,9 +57,11 @@ jobs:
             --clean `
             --onefile `
             --name RealTimeSystemMonitoring `
+            --collect-all aiosqlite `
             --collect-all alembic `
             --collect-all psutil `
             --collect-all sqlalchemy `
+            --hidden-import sqlalchemy.dialects.sqlite.aiosqlite `
             --add-data "frontend/dist;frontend/dist" `
             --add-data "migrations;migrations" `
             --add-data "alembic.ini;." `
@@ -78,6 +80,18 @@ jobs:
       - name: Smoke test executable and local telemetry
         shell: pwsh
         run: |
+          $stdoutLog = "dist/desktop-stdout.log"
+          $stderrLog = "dist/desktop-stderr.log"
+          New-Item -ItemType File -Path $stdoutLog -Force | Out-Null
+          New-Item -ItemType File -Path $stderrLog -Force | Out-Null
+
+          function Show-DesktopLogs {
+            Write-Host "--- desktop stdout ---"
+            Get-Content $stdoutLog -ErrorAction SilentlyContinue
+            Write-Host "--- desktop stderr ---"
+            Get-Content $stderrLog -ErrorAction SilentlyContinue
+          }
+
           $arguments = @(
             "--no-browser",
             "--port", "8765",
@@ -86,10 +100,17 @@ jobs:
           $process = Start-Process `
             -FilePath "dist/RealTimeSystemMonitoring.exe" `
             -ArgumentList $arguments `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog `
             -PassThru
           try {
             $ready = $false
-            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+            for ($attempt = 0; $attempt -lt 120; $attempt++) {
+              $process.Refresh()
+              if ($process.HasExited) {
+                Show-DesktopLogs
+                throw "Desktop executable exited before readiness with code $($process.ExitCode)"
+              }
               try {
                 $response = Invoke-WebRequest `
                   -Uri "http://127.0.0.1:8765/health/live" `
@@ -104,6 +125,7 @@ jobs:
               }
             }
             if (-not $ready) {
+              Show-DesktopLogs
               throw "Desktop executable did not become ready"
             }
 
@@ -112,11 +134,17 @@ jobs:
               -UseBasicParsing `
               -TimeoutSec 5
             if ($dashboard.StatusCode -ne 200) {
+              Show-DesktopLogs
               throw "Bundled dashboard did not load"
             }
 
             $nodeDiscovered = $false
             for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              $process.Refresh()
+              if ($process.HasExited) {
+                Show-DesktopLogs
+                throw "Desktop executable exited during telemetry validation with code $($process.ExitCode)"
+              }
               try {
                 $nodes = Invoke-RestMethod `
                   -Uri "http://127.0.0.1:8765/v1/nodes" `
@@ -131,19 +159,26 @@ jobs:
               Start-Sleep -Seconds 1
             }
             if (-not $nodeDiscovered) {
+              Show-DesktopLogs
               throw "Packaged Windows collector did not produce telemetry"
             }
           } finally {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            }
+            Show-DesktopLogs
           }
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: RealTimeSystemMonitoring-Windows
           path: |
             dist/RealTimeSystemMonitoring.exe
             dist/RealTimeSystemMonitoring.exe.sha256
-          if-no-files-found: error
+            dist/desktop-stdout.log
+            dist/desktop-stderr.log
+          if-no-files-found: warn
 
       - name: Attach executable to tagged release
         if: startsWith(github.ref, 'refs/tags/')
