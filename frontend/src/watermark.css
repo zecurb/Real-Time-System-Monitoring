@@ -1,0 +1,31 @@
+body::before {
+  position: fixed;
+  right: clamp(-90px, -4vw, -24px);
+  bottom: clamp(-90px, -5vw, -30px);
+  width: min(62vw, 760px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background-image: url("https://avatars.githubusercontent.com/u/309944560?v=4");
+  background-position: center;
+  background-size: cover;
+  content: "";
+  filter: grayscale(1) contrast(1.08);
+  opacity: 0.065;
+  pointer-events: none;
+  transform: scale(1.04);
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 720px) {
+  body::before {
+    right: -120px;
+    bottom: -70px;
+    width: 520px;
+    opacity: 0.045;
+  }
+}

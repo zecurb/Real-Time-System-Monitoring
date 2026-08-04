@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Real-Time System Monitoring predicts infrastructure risk, explains anomalies, and gives operators auditable incident workflows."
+    />
+    <title>Real-Time System Monitoring</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-watermark" aria-hidden="true"></div>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="Real-Time System Monitoring home">
+        <span class="brand-mark">RT</span>
+        <span>Real-Time System Monitoring</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="#capabilities">Capabilities</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/zecurb/Real-Time-System-Monitoring">GitHub</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Predictive observability for engineering teams</p>
+          <h1>See system failures developing before they become incidents.</h1>
+          <p class="hero-text">
+            Collect infrastructure telemetry, detect explainable anomalies, forecast resource
+            exhaustion, and manage incidents through a durable operator workflow.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="#download">Download for Windows</a>
+            <a class="button secondary" href="https://github.com/zecurb/Real-Time-System-Monitoring">
+              View source
+            </a>
+          </div>
+          <div class="release-status" role="status">
+            <span class="status-dot"></span>
+            <span>Current stable release: v1.1.0</span>
+          </div>
+        </div>
+
+        <div class="product-preview" aria-label="Product dashboard preview">
+          <div class="preview-toolbar">
+            <span></span><span></span><span></span>
+            <p>Incident Console</p>
+          </div>
+          <div class="preview-grid">
+            <article class="metric-card">
+              <p>Pipeline depth</p>
+              <strong>12</strong>
+              <span>Healthy</span>
+            </article>
+            <article class="metric-card warning">
+              <p>Forecast risk</p>
+              <strong>84%</strong>
+              <span>Memory threshold</span>
+            </article>
+            <article class="metric-card">
+              <p>Active incidents</p>
+              <strong>3</strong>
+              <span>1 acknowledged</span>
+            </article>
+            <article class="chart-card">
+              <div class="chart-heading">
+                <div>
+                  <p>Memory utilization</p>
+                  <strong>Predictive trend</strong>
+                </div>
+                <span>Last 6 hours</span>
+              </div>
+              <svg viewBox="0 0 600 210" role="img" aria-label="Memory trend rising over time">
+                <defs>
+                  <linearGradient id="area" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="0%" stop-color="currentColor" stop-opacity="0.35" />
+                    <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+                  </linearGradient>
+                </defs>
+                <path class="grid-line" d="M0 40H600 M0 100H600 M0 160H600" />
+                <path class="chart-area" d="M0 170 C90 168 100 145 180 148 S270 112 340 120 S440 90 500 70 S560 48 600 38 V210 H0 Z" />
+                <path class="chart-line" d="M0 170 C90 168 100 145 180 148 S270 112 340 120 S440 90 500 70 S560 48 600 38" />
+              </svg>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="capabilities">
+        <div class="section-heading">
+          <p class="eyebrow">Core capabilities</p>
+          <h2>Built around reliability evidence, not unexplained alerts.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <span class="feature-number">01</span>
+            <h3>Durable telemetry</h3>
+            <p>Idempotent ingestion, PostgreSQL-backed storage, bounded processing, retries, and dead-letter handling.</p>
+          </article>
+          <article>
+            <span class="feature-number">02</span>
+            <h3>Explainable detection</h3>
+            <p>Median and MAD baselines identify unusual behavior while preserving the evidence behind each finding.</p>
+          </article>
+          <article>
+            <span class="feature-number">03</span>
+            <h3>Failure forecasting</h3>
+            <p>Memory and disk trends estimate threshold crossings with confidence, risk, and backtesting metadata.</p>
+          </article>
+          <article>
+            <span class="feature-number">04</span>
+            <h3>Incident operations</h3>
+            <p>Acknowledge, assign, resolve, reopen, and audit incidents through revision-safe operator workflows.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="section architecture" id="architecture">
+        <div class="section-heading">
+          <p class="eyebrow">System architecture</p>
+          <h2>One observable path from host telemetry to operator action.</h2>
+        </div>
+        <div class="architecture-flow" aria-label="System architecture flow">
+          <div>Collectors</div><span>→</span>
+          <div>Ingestion API</div><span>→</span>
+          <div>Durable queue</div><span>→</span>
+          <div>Analysis workers</div><span>→</span>
+          <div>Incident console</div>
+        </div>
+      </section>
+
+      <section class="section download" id="download">
+        <div>
+          <p class="eyebrow">Windows desktop distribution</p>
+          <h2>Launch the dashboard without setting up Python or Node.js.</h2>
+          <p>
+            The Windows executable collects local system telemetry, initializes its SQLite
+            database, applies migrations, runs the analysis worker, starts the incident console,
+            and opens it in your default browser.
+          </p>
+        </div>
+        <div class="download-card">
+          <span class="platform">Windows 10/11 · x64</span>
+          <h3>RealTimeSystemMonitoring.exe</h3>
+          <p>Self-contained local desktop distribution</p>
+          <a
+            class="button primary"
+            href="https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe"
+          >
+            Download the Windows .exe
+          </a>
+          <small>
+            Verify the
+            <a href="https://github.com/zecurb/Real-Time-System-Monitoring/releases/latest/download/RealTimeSystemMonitoring.exe.sha256">
+              SHA-256 checksum
+            </a>.
+            The initial build is not code-signed, so Windows may display an unrecognized publisher warning.
+          </small>
+          <small>Source-visible proprietary software. Review the license before use.</small>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Built by Nehemiah Boyce · © 2026</p>
+      <div>
+        <a href="https://github.com/zecurb">GitHub profile</a>
+        <a href="https://github.com/zecurb/Real-Time-System-Monitoring/releases">Releases</a>
+      </div>
+    </footer>
+  </body>
+</html>

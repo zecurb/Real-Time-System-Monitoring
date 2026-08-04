@@ -2,6 +2,26 @@
 
 All notable changes to this project are documented here.
 
+## [1.1.0] - 2026-08-02
+
+### Added
+
+- Self-contained Windows desktop executable built with PyInstaller.
+- Native Windows telemetry collection for load, CPU count, memory, disk, network, uptime, and process count.
+- Automatic local database initialization and Alembic migrations.
+- Automatic local telemetry ingestion and background analysis processing.
+- Bundled React incident console served from the desktop executable.
+- Windows packaging CI with executable smoke testing and local node discovery.
+- SHA-256 checksum generation and tagged-release asset publishing.
+- Public GitHub Pages product website with direct Windows downloads.
+- Subtle GitHub profile-image watermark in the product site and incident console.
+
+### Distribution boundaries
+
+- The initial Windows executable is not Authenticode-signed and may trigger an unrecognized publisher warning.
+- The desktop distribution uses local SQLite and one background worker; PostgreSQL remains the production target for multi-worker deployments.
+- The executable binds only to loopback by default and is intended for local desktop evaluation.
+
 ## [1.0.0] - 2026-07-30
 
 ### Added
